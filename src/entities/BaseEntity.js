@@ -1,0 +1,84 @@
+import { supabase } from '@/lib/supabase-client';
+
+export class BaseEntity {
+  constructor(tableName) {
+    this.tableName = tableName;
+    this.client = supabase;
+  }
+
+  _parseSort(sortStr) {
+    if (!sortStr) return { column: 'created_at', ascending: false };
+    const ascending = !sortStr.startsWith('-');
+    const column = sortStr.replace(/^-/, '')
+      .replace('created_date', 'created_at')
+      .replace('updated_date', 'updated_at');
+    return { column, ascending };
+  }
+
+  async list(sortBy = '-created_at') {
+    const { column, ascending } = this._parseSort(sortBy);
+    const { data, error } = await this.client
+      .from(this.tableName)
+      .select('*')
+      .order(column, { ascending });
+    if (error) throw new Error(`[${this.tableName}] list() failed: ${error.message}`);
+    return data ?? [];
+  }
+
+  async filter(filters = {}, sortBy = '-created_at') {
+    const { column, ascending } = this._parseSort(sortBy);
+    let query = this.client.from(this.tableName).select('*');
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      if (Array.isArray(value)) {
+        query = query.in(key, value);
+      } else {
+        query = query.eq(key, value);
+      }
+    });
+    query = query.order(column, { ascending });
+    const { data, error } = await query;
+    if (error) throw new Error(`[${this.tableName}] filter() failed: ${error.message}`);
+    return data ?? [];
+  }
+
+  async get(id) {
+    const { data, error } = await this.client
+      .from(this.tableName)
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw new Error(`[${this.tableName}] get() failed: ${error.message}`);
+    return data;
+  }
+
+  async create(payload) {
+    const { data, error } = await this.client
+      .from(this.tableName)
+      .insert([payload])
+      .select()
+      .single();
+    if (error) throw new Error(`[${this.tableName}] create() failed: ${error.message}`);
+    return data;
+  }
+
+  async update(id, payload) {
+    const { data, error } = await this.client
+      .from(this.tableName)
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw new Error(`[${this.tableName}] update() failed: ${error.message}`);
+    return data;
+  }
+
+  async delete(id) {
+    const { error } = await this.client
+      .from(this.tableName)
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(`[${this.tableName}] delete() failed: ${error.message}`);
+    return true;
+  }
+}
