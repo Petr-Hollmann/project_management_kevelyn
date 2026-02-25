@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { User } from "@/entities/User";
+import { Worker } from "@/entities/Worker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -149,9 +150,13 @@ export default function WorkerForm({
       const oldUrl = formData.photo_url;
       const { file_url } = await UploadFile({ file, folder: 'workers' });
       if (oldUrl) await DeleteFile(oldUrl);
+      // Save photo_url immediately with a minimal update — avoids unrelated DB triggers
+      if (worker?.id) {
+        await Worker.update(worker.id, { photo_url: file_url });
+      }
       setFormData(prev => ({ ...prev, photo_url: file_url }));
-      toast({ title: "Úspěch", description: "Fotografie byla nahrána." });
-    } catch {
+      toast({ title: "Úspěch", description: "Fotografie byla nahrána a uložena." });
+    } catch (err) {
       toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se nahrát fotografii." });
     }
     setIsUploadingPhoto(false);
@@ -311,7 +316,11 @@ export default function WorkerForm({
                     <div className="flex items-center gap-4">
                       <img src={formData.photo_url} alt="Fotografie" className="w-20 h-20 object-cover border rounded-full" />
                       {canEditBasicInfo && (
-                        <Button type="button" variant="outline" size="sm" onClick={() => { DeleteFile(formData.photo_url); setFormData(p => ({ ...p, photo_url: '' })); }}>Odstranit</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={async () => {
+                          await DeleteFile(formData.photo_url);
+                          if (worker?.id) await Worker.update(worker.id, { photo_url: null });
+                          setFormData(p => ({ ...p, photo_url: '' }));
+                        }}>Odstranit</Button>
                       )}
                     </div>
                   )}
