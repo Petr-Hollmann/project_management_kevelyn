@@ -52,9 +52,15 @@ export default function UserManagement({ users, workers, onUserUpdate }) {
 
   const formatPhoneDisplay = (phone) => {
     if (!phone) return null;
+    // Číslo uložené s mezerami → zobraz přímo jak je v DB
+    if (phone.includes(' ')) return phone.replace(/\s+/g, ' ').trim();
+    // Bez mezer → pokus o formátování: předvolba + lokální číslo ve skupinách po 3
     const { country_code, phone_number } = parsePhone(phone);
-    const formatted = phone_number.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
-    return `${country_code} ${formatted}`;
+    const digits = phone_number.replace(/\D/g, '');
+    if (digits.length === 9) {
+      return `${country_code} ${digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}`;
+    }
+    return `${country_code} ${phone_number}`;
   };
 
   const workersById = workers.reduce((acc, worker) => {
