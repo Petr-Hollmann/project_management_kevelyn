@@ -20,7 +20,7 @@ import {
   CheckCircle,
   Filter
 } from "lucide-react";
-import { format, isAfter, isBefore, addDays } from "date-fns";
+import { format, isBefore, addDays } from "date-fns";
 import { cs } from "date-fns/locale";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Label } from "@/components/ui/label";
@@ -195,7 +195,9 @@ export default function Dashboard() {
       worker.certificates?.forEach(cert => {
         if (cert.expiry_date) {
           const expiryDate = new Date(cert.expiry_date);
-          if (isAfter(expiryDate, today) && isBefore(expiryDate, warningDate)) {
+          const daysLeft = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          // Zahrnout: prošlé (daysLeft < 0) i expirující do 30 dní
+          if (daysLeft < 0 || isBefore(expiryDate, warningDate)) {
             expiring.push({
               type: 'certificate',
               name: cert.name,
@@ -203,7 +205,8 @@ export default function Dashboard() {
               owner_id: worker.id,
               owner_type: 'worker',
               expiry_date: cert.expiry_date,
-              days_left: Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
+              days_left: daysLeft,
+              expired: daysLeft < 0,
             });
           }
         }
@@ -221,7 +224,8 @@ export default function Dashboard() {
       dates.forEach(({ type, date }) => {
         if (date) {
           const expiryDate = new Date(date);
-          if (isAfter(expiryDate, today) && isBefore(expiryDate, warningDate)) {
+          const daysLeft = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysLeft < 0 || isBefore(expiryDate, warningDate)) {
             expiring.push({
               type: 'document',
               name: type,
@@ -229,13 +233,15 @@ export default function Dashboard() {
               owner_id: vehicle.id,
               owner_type: 'vehicle',
               expiry_date: date,
-              days_left: Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
+              days_left: daysLeft,
+              expired: daysLeft < 0,
             });
           }
         }
       });
     });
 
+    // Prošlé nejdřív (nejstarší nahoře), pak expirující brzy
     return expiring.sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date));
   };
 

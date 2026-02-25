@@ -7,18 +7,31 @@ import { cs } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ExpiringDocuments({ documents, isLoading }) {
-  const getDaysLeftColor = (daysLeft) => {
-    if (daysLeft <= 7) return "bg-red-100 text-red-800";
-    if (daysLeft <= 14) return "bg-orange-100 text-orange-800";
+  const getBadgeStyle = (doc) => {
+    if (doc.expired) return "bg-red-600 text-white";
+    if (doc.days_left <= 7) return "bg-red-100 text-red-800";
+    if (doc.days_left <= 14) return "bg-orange-100 text-orange-800";
     return "bg-yellow-100 text-yellow-800";
   };
+
+  const getBadgeLabel = (doc) => {
+    if (doc.expired) return `Prošlé ${Math.abs(doc.days_left)}d`;
+    return `${doc.days_left}d`;
+  };
+
+  const expiredDocs = documents.filter(d => d.expired);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <AlertTriangle className="w-5 h-5" />
-          Expirující dokumenty
+          Dokumenty
+          {expiredDocs.length > 0 && (
+            <span className="ml-auto text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-normal">
+              {expiredDocs.length} prošlé
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -39,14 +52,19 @@ export default function ExpiringDocuments({ documents, isLoading }) {
         ) : (
           <div className="space-y-3">
             {documents.map((doc, index) => (
-              <div key={index} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+              <div
+                key={index}
+                className={`p-3 border rounded-lg transition-colors ${doc.expired ? 'border-red-300 bg-red-50' : 'hover:bg-slate-50'}`}
+              >
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-slate-900 text-sm truncate">{doc.name}</h4>
+                    <h4 className={`font-medium text-sm truncate ${doc.expired ? 'text-red-900' : 'text-slate-900'}`}>
+                      {doc.name}
+                    </h4>
                     <p className="text-xs text-slate-600 truncate">{doc.owner}</p>
                   </div>
-                  <Badge className={`${getDaysLeftColor(doc.days_left)} flex-shrink-0`}>
-                    {doc.days_left}d
+                  <Badge variant="secondary" className={`${getBadgeStyle(doc)} flex-shrink-0`}>
+                    {getBadgeLabel(doc)}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-1 text-xs text-slate-500">
