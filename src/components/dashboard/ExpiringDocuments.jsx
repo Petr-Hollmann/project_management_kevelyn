@@ -5,8 +5,12 @@ import { AlertTriangle, Calendar, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { cs } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 export default function ExpiringDocuments({ documents, isLoading }) {
+  const navigate = useNavigate();
+
   const getBadgeStyle = (doc) => {
     if (doc.expired) return "bg-red-600 text-white";
     if (doc.days_left <= 7) return "bg-red-100 text-red-800";
@@ -17,6 +21,14 @@ export default function ExpiringDocuments({ documents, isLoading }) {
   const getBadgeLabel = (doc) => {
     if (doc.expired) return `Prošlé ${Math.abs(doc.days_left)}d`;
     return `${doc.days_left}d`;
+  };
+
+  const handleClick = (doc) => {
+    if (doc.owner_type === 'worker') {
+      navigate(`${createPageUrl('WorkerDetail')}?id=${doc.owner_id}`);
+    } else if (doc.owner_type === 'vehicle') {
+      navigate(`${createPageUrl('VehicleDetail')}?id=${doc.owner_id}`);
+    }
   };
 
   const expiredDocs = documents.filter(d => d.expired);
@@ -54,7 +66,12 @@ export default function ExpiringDocuments({ documents, isLoading }) {
             {documents.map((doc, index) => (
               <div
                 key={index}
-                className={`p-3 border rounded-lg transition-colors ${doc.expired ? 'border-red-300 bg-red-50' : 'hover:bg-slate-50'}`}
+                onClick={() => handleClick(doc)}
+                className={`p-3 border rounded-lg transition-colors cursor-pointer ${
+                  doc.expired
+                    ? 'border-red-300 bg-red-50 hover:bg-red-100'
+                    : 'hover:bg-slate-50'
+                }`}
               >
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div className="flex-1 min-w-0">
