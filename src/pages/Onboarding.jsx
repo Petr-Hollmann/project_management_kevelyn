@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '@/entities/User';
 import { Worker } from '@/entities/Worker';
 import { Button } from '@/components/ui/button';
@@ -7,12 +7,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, Phone } from 'lucide-react';
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+import { supabase } from '@/lib/supabase-client';
 
 export default function OnboardingPage() {
   const [countryCode, setCountryCode] = useState('+420');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  // Pokud byl telefon zadán při registraci, uložen je v auth metadata → automaticky zpracujeme
+  useEffect(() => {
+    const autoMatchFromRegistration = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        const savedPhone = user?.user_metadata?.phone;
+        if (!savedPhone) return;
+        await processPhone(savedPhone);
+      } catch {
+        // Tiché selhání — uživatel uvidí formulář a zadá telefon ručně
+      }
+    };
+    autoMatchFromRegistration();
+  }, []);
 
   const formatPhoneNumberOnly = (value) => {
     const cleaned = value.replace(/\D/g, '');
@@ -47,47 +63,39 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const processPhone = async (fullPhone) => {
     setIsLoading(true);
-
-    const cleanedNumber = phoneNumber.replace(/\D/g, '');
-    if (cleanedNumber.length !== 9) {
-        toast({ variant: 'destructive', title: 'Neplatné číslo', description: 'Zadejte prosím platné 9místné telefonní číslo.' });
-        setIsLoading(false);
-        return;
-    }
-
-    const fullPhone = `${countryCode}${cleanedNumber}`;
-
     try {
-      // 1. Update user's phone number
-      await User.updateMyUserData({ phone: fullPhone });
-      
-      // 2. Try to find a matching worker
       const workers = await Worker.list();
-      const matchingWorker = workers.find(w => w.phone && w.phone.replace(/\s/g, '') === fullPhone);
+      const normalizedInput = fullPhone.replace(/\s/g, '');
+      const matchingWorker = workers.find(w => w.phone && w.phone.replace(/\s/g, '') === normalizedInput);
 
-      // 3. Assign role based on match
       if (matchingWorker) {
-        await User.updateMyUserData({
-          app_role: 'installer',
-          worker_profile_id: matchingWorker.id,
-        });
+        await User.updateMyUserData({ app_role: 'installer', worker_profile_id: matchingWorker.id });
         toast({ title: 'Profil nalezen!', description: 'Váš účet byl úspěšně propojen s profilem montážníka.' });
       } else {
         await User.updateMyUserData({ app_role: 'pending' });
         toast({ title: 'Odesláno', description: 'Váš účet nyní čeká na schválení administrátorem.' });
       }
 
-      // 4. Reload the page to let Layout handle the new role
       window.location.href = '/';
-
     } catch (error) {
       console.error("Onboarding error:", error);
       toast({ variant: 'destructive', title: 'Chyba', description: 'Něco se pokazilo. Zkuste to prosím znovu.' });
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    if (cleanedNumber.length !== 9) {
+      toast({ variant: 'destructive', title: 'Neplatné číslo', description: 'Zadejte prosím platné 9místné telefonní číslo.' });
+      return;
+    }
+
+    await processPhone(`${countryCode}${cleanedNumber}`);
   };
 
   return (

@@ -120,11 +120,14 @@ export default function Login() {
       }
     }
 
-    // 2. Vytvořit auth účet
+    // 2. Vytvořit auth účet (phone uložíme do metadata pro případ onboardingu po potvrzení emailu)
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin },
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { phone: phone ? normalizePhone(phone) : null },
+      },
     });
     if (signUpError) {
       const msg = signUpError.message?.toLowerCase() ?? '';
