@@ -138,7 +138,18 @@ export default function WorkerDetail() {
 
   const handleUpdateWorker = async (workerData) => {
     try {
-      await Worker.update(worker.id, workerData);
+      const payload = { ...workerData };
+
+      // Don't send `phone` if it hasn't actually changed.
+      // There is a DB trigger that syncs worker.phone → users.phone on every UPDATE.
+      // If we send the same phone value, the trigger fires unnecessarily and can
+      // violate the users_phone_key unique constraint when another user has the same phone.
+      const norm = (v) => (v === '' || v === undefined) ? null : v;
+      if (norm(payload.phone) === norm(worker.phone)) {
+        delete payload.phone;
+      }
+
+      await Worker.update(worker.id, payload);
       const currentUser = await User.me().catch(() => null);
       await loadWorkerData(worker.id, currentUser);
       setShowEditModal(false);
