@@ -138,18 +138,26 @@ export default function WorkerDetail() {
 
   const handleUpdateWorker = async (workerData) => {
     try {
-      const payload = { ...workerData };
-
-      // Don't send `phone` if it hasn't actually changed.
-      // There is a DB trigger that syncs worker.phone → users.phone on every UPDATE.
-      // If we send the same phone value, the trigger fires unnecessarily and can
-      // violate the users_phone_key unique constraint when another user has the same phone.
+      // Only send fields that actually changed — prevents DB triggers (e.g. phone sync)
+      // from firing on fields the user never touched.
       const norm = (v) => (v === '' || v === undefined) ? null : v;
-      if (norm(payload.phone) === norm(worker.phone)) {
-        delete payload.phone;
+      const diffPayload = {};
+      for (const [key, value] of Object.entries(workerData)) {
+        const newVal = norm(value);
+        const oldVal = norm(worker[key] ?? null);
+        const changed = Array.isArray(newVal) || Array.isArray(oldVal)
+          ? JSON.stringify(newVal) !== JSON.stringify(oldVal)
+          : newVal !== oldVal;
+        if (changed) diffPayload[key] = newVal;
       }
 
-      await Worker.update(worker.id, payload);
+      if (Object.keys(diffPayload).length === 0) {
+        setShowEditModal(false);
+        setDefaultTab("info");
+        return;
+      }
+
+      await Worker.update(worker.id, diffPayload);
       const currentUser = await User.me().catch(() => null);
       await loadWorkerData(worker.id, currentUser);
       setShowEditModal(false);
