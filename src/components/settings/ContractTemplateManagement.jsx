@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { FileText, Edit, Trash2, Plus, Star } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
@@ -108,45 +107,42 @@ export default function ContractTemplateManagement() {
           </CardContent>
         </Card>
       ) : (
-        <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Název šablony</TableHead>
-              <TableHead>Náhled textu</TableHead>
-              <TableHead>Výchozí</TableHead>
-              <TableHead className="text-right">Akce</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {templates.map(template => (
-              <TableRow key={template.id}>
-                <TableCell className="font-medium">{template.name}</TableCell>
-                <TableCell className="max-w-md truncate text-sm text-slate-600">
-                  {template.content.substring(0, 100)}...
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleSetDefault(template.id)}
-                    className={template.is_default ? "text-yellow-600" : "text-slate-400"}
-                  >
-                    <Star className={`w-4 h-4 ${template.is_default ? 'fill-yellow-600' : ''}`} />
-                  </Button>
-                </TableCell>
-                <TableCell className="text-right space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(template)}>
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleDelete(template.id)}>
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="space-y-3">
+          {templates.map(template => (
+            <div key={template.id} className="border border-slate-200 rounded-lg p-4 bg-white">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="font-medium text-slate-900 truncate">{template.name}</span>
+                  {template.is_default && (
+                    <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded flex-shrink-0">Výchozí</span>
+                  )}
+                </div>
+              </div>
+              <p className="text-sm text-slate-500 line-clamp-2 mb-3">
+                {template.content.substring(0, 120)}…
+              </p>
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleSetDefault(template.id)}
+                  className={template.is_default ? "text-yellow-600" : "text-slate-400"}
+                  title="Nastavit jako výchozí"
+                >
+                  <Star className={`w-4 h-4 ${template.is_default ? 'fill-yellow-600' : ''}`} />
+                  <span className="ml-1 text-xs">{template.is_default ? 'Výchozí' : 'Nastavit výchozí'}</span>
+                </Button>
+                <div className="flex-1" />
+                <Button variant="outline" size="sm" onClick={() => handleEdit(template)}>
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDelete(template.id)}>
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

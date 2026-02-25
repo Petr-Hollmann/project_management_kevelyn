@@ -2,7 +2,6 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { UserCircle, Play, StopCircle } from 'lucide-react';
 import { useToast } from "@/components/ui/use-toast";
 
@@ -71,68 +70,41 @@ export default function RoleTestingManagement({ workers }) {
         </Card>
       )}
 
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Montážník</TableHead>
-              <TableHead>Kontakt</TableHead>
-              <TableHead>Seniorita</TableHead>
-              <TableHead>Typ</TableHead>
-              <TableHead className="text-right">Akce</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {workers.map(worker => (
-              <TableRow key={worker.id}>
-                <TableCell>
-                  <div className="font-medium">
-                    {worker.first_name} {worker.last_name}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="text-sm font-mono">
-                    {worker.phone || <span className="text-slate-400 italic">Bez telefonu</span>}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {worker.seniority ? (
-                    <Badge variant="outline" className="capitalize">
-                      {seniorityLabels[worker.seniority] || worker.seniority}
-                    </Badge>
-                  ) : (
-                    <span className="text-sm text-slate-400">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {worker.worker_type ? (
-                    <Badge variant="secondary">
-                      {workerTypeLabels[worker.worker_type] || worker.worker_type}
-                    </Badge>
-                  ) : (
-                    <span className="text-sm text-slate-400">-</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {impersonatedId === worker.id ? (
-                    <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                      Aktivní testování
-                    </Badge>
-                  ) : (
-                    <Button
-                      onClick={() => handleViewAs(worker.id)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      <Play className="w-4 h-4 mr-2" />
-                      Zobrazit jako
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className="space-y-3">
+        {workers.map(worker => (
+          <div key={worker.id} className={`border rounded-lg p-4 bg-white ${impersonatedId === worker.id ? 'border-yellow-400 bg-yellow-50' : 'border-slate-200'}`}>
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="min-w-0">
+                <div className="font-medium text-slate-900">{worker.first_name} {worker.last_name}</div>
+                {worker.phone && <div className="text-sm text-slate-500 font-mono mt-0.5">{worker.phone}</div>}
+              </div>
+              <div className="flex flex-wrap gap-1.5 justify-end">
+                {worker.seniority && (
+                  <Badge variant="outline" className="capitalize text-xs">
+                    {seniorityLabels[worker.seniority] || worker.seniority}
+                  </Badge>
+                )}
+                {worker.worker_type && (
+                  <Badge variant="secondary" className="text-xs">
+                    {workerTypeLabels[worker.worker_type] || worker.worker_type}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              {impersonatedId === worker.id ? (
+                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                  Aktivní testování
+                </Badge>
+              ) : (
+                <Button onClick={() => handleViewAs(worker.id)} size="sm" variant="outline">
+                  <Play className="w-4 h-4 mr-2" />
+                  Zobrazit jako
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
