@@ -5,6 +5,64 @@
 
 import { supabase } from '@/lib/supabase-client';
 
+const MAX_IMAGE_DIMENSION = 1920;
+const IMAGE_QUALITY = 0.82;
+
+/**
+ * Zkomprimuje obrázek na canvas před uploadem.
+ * Zachová poměr stran, max 1920px na delší straně, JPEG kvalita 82%.
+ * PDF a ostatní soubory projdou beze změny.
+ */
+async function compressImageIfNeeded(file) {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      let { width, height } = img;
+      if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION && file.size < 300 * 1024) {
+        // Malý obrázek – nepotřebuje kompresi
+        resolve(file);
+        return;
+      }
+
+      // Zmenšení při překročení max rozměru
+      if (width > height && width > MAX_IMAGE_DIMENSION) {
+        height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
+        width = MAX_IMAGE_DIMENSION;
+      } else if (height > MAX_IMAGE_DIMENSION) {
+        width = Math.round((width * MAX_IMAGE_DIMENSION) / height);
+        height = MAX_IMAGE_DIMENSION;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          console.log(`Image compressed: ${(file.size / 1024).toFixed(0)} KB → ${(compressed.size / 1024).toFixed(0)} KB`);
+          resolve(compressed);
+        },
+        'image/jpeg',
+        IMAGE_QUALITY
+      );
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 /**
  * Nahrání souboru do Supabase Storage.
  * Vrací veřejnou URL souboru.
@@ -13,10 +71,12 @@ export async function UploadFile({ file, bucket = 'files', folder = '', path = u
   const { data: { session } } = await supabase.auth.getSession();
   console.log('Upload session:', session ? `user=${session.user.id}` : 'NO SESSION');
 
-  const filePath = path ?? `${folder ? folder + '/' : ''}${Date.now()}_${file.name}`;
+  const processedFile = await compressImageIfNeeded(file);
+
+  const filePath = path ?? `${folder ? folder + '/' : ''}${Date.now()}_${processedFile.name}`;
   const { data, error } = await supabase.storage
     .from(bucket)
-    .upload(filePath, file, { upsert: true });
+    .upload(filePath, processedFile, { upsert: true });
 
   if (error) {
     console.error('UploadFile error full object:', error);
