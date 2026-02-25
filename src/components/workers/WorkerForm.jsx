@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Save, Plus, FileText, User as UserIcon, History, Receipt, Copy, Upload, Loader2, AlertCircle, Search } from "lucide-react";
 import { format } from "date-fns";
-import { UploadFile } from "@/integrations/Core";
+import { UploadFile, DeleteFile } from "@/integrations/Core";
 import { useToast } from "@/components/ui/use-toast";
 import CertificateManagement from "./CertificateManagement";
 import AssignmentHistory from "./AssignmentHistory";
@@ -146,7 +146,9 @@ export default function WorkerForm({
     if (!file) return;
     setIsUploadingPhoto(true);
     try {
+      const oldUrl = formData.photo_url;
       const { file_url } = await UploadFile({ file, folder: 'workers' });
+      if (oldUrl) await DeleteFile(oldUrl);
       setFormData(prev => ({ ...prev, photo_url: file_url }));
       toast({ title: "Úspěch", description: "Fotografie byla nahrána." });
     } catch {
@@ -309,7 +311,7 @@ export default function WorkerForm({
                     <div className="flex items-center gap-4">
                       <img src={formData.photo_url} alt="Fotografie" className="w-20 h-20 object-cover border rounded-full" />
                       {canEditBasicInfo && (
-                        <Button type="button" variant="outline" size="sm" onClick={() => setFormData(p => ({ ...p, photo_url: '' }))}>Odstranit</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => { DeleteFile(formData.photo_url); setFormData(p => ({ ...p, photo_url: '' })); }}>Odstranit</Button>
                       )}
                     </div>
                   )}

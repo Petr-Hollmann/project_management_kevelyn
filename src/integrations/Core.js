@@ -64,6 +64,25 @@ async function compressImageIfNeeded(file) {
 }
 
 /**
+ * Smaže soubor ze Supabase Storage podle jeho veřejné URL.
+ * Funguje pro bucket 'files'. Tiše ignoruje chyby (soubor možná neexistuje).
+ */
+export async function DeleteFile(fileUrl, bucket = 'files') {
+  if (!fileUrl) return;
+  try {
+    const marker = `/object/public/${bucket}/`;
+    const idx = fileUrl.indexOf(marker);
+    if (idx === -1) return;
+    const filePath = decodeURIComponent(fileUrl.substring(idx + marker.length));
+    const { error } = await supabase.storage.from(bucket).remove([filePath]);
+    if (error) console.warn('DeleteFile warning:', error.message);
+    else console.log('DeleteFile: removed', filePath);
+  } catch (e) {
+    console.warn('DeleteFile error:', e);
+  }
+}
+
+/**
  * Nahrání souboru do Supabase Storage.
  * Vrací veřejnou URL souboru.
  */

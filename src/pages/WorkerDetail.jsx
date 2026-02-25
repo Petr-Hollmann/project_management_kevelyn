@@ -16,6 +16,7 @@ import { cs } from "date-fns/locale";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
 
 import GanttChart from "../components/dashboard/GanttChart";
 import WorkerForm from "../components/workers/WorkerForm";
@@ -33,6 +34,7 @@ export default function WorkerDetail() {
   const [expiringCertificates, setExpiringCertificates] = useState([]);
   const [certificates, setCertificates] = useState([]);
   const [previewCert, setPreviewCert] = useState(null);
+  const { toast } = useToast();
 
   const urlParams = new URLSearchParams(window.location.search);
   const tabParam = urlParams.get('tab');
@@ -137,12 +139,14 @@ export default function WorkerDetail() {
   const handleUpdateWorker = async (workerData) => {
     try {
       await Worker.update(worker.id, workerData);
-      const currentUser = await User.me().catch(() => null); 
+      const currentUser = await User.me().catch(() => null);
       await loadWorkerData(worker.id, currentUser);
       setShowEditModal(false);
       setDefaultTab("info");
+      toast({ title: "Uloženo", description: "Profil montážníka byl aktualizován." });
     } catch (error) {
       console.error("Error updating worker:", error);
+      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se uložit změny: " + error.message });
     }
   };
 

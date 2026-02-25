@@ -63,9 +63,11 @@ export class BaseEntity {
   }
 
   async update(id, payload) {
+    // Strip auto-managed / read-only columns that Supabase won't accept in an UPDATE
+    const { id: _id, created_at, updated_at, ...cleanPayload } = payload;
     const { data, error } = await this.client
       .from(this.tableName)
-      .update(payload)
+      .update(cleanPayload)
       .eq('id', id)
       .select()
       .single();
