@@ -310,31 +310,31 @@ export default function GanttChart({
         .sort((a, b) => {
           if (safeSortConfig.key === 'name') {
             // Pro název použijeme abecední řazení
-            return safeSortConfig.direction === 'asc' 
-              ? a.name.localeCompare(b.name, 'cs', { sensitivity: 'base' })
-              : b.name.localeCompare(a.name, 'cs', { sensitivity: 'base' });
+            return safeSortConfig.direction === 'asc'
+              ? (a.name || '').localeCompare(b.name || '', 'cs', { sensitivity: 'base' })
+              : (b.name || '').localeCompare(a.name || '', 'cs', { sensitivity: 'base' });
           }
-          
+
           if (safeSortConfig.key === 'start_date') {
-            return safeSortConfig.direction === 'asc' 
+            return safeSortConfig.direction === 'asc'
               ? new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
               : new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
           }
 
           if (safeSortConfig.key === 'status') {
             // Sort by status labels
-            const statusA = statusLabels[a.status] || a.status;
-            const statusB = statusLabels[b.status] || b.status;
-            return safeSortConfig.direction === 'asc' 
+            const statusA = statusLabels[a.status] || a.status || '';
+            const statusB = statusLabels[b.status] || b.status || '';
+            return safeSortConfig.direction === 'asc'
               ? statusA.localeCompare(statusB, 'cs', { sensitivity: 'base' })
-              : statusB.localeCompare(a.status, 'cs', { sensitivity: 'base' });
+              : statusB.localeCompare(statusA, 'cs', { sensitivity: 'base' });
           }
 
           // For other fields, keep original logic (which is effectively no sort if key is not matched)
           // Fallback to name sort if no specific key is matched
-          return safeSortConfig.direction === 'asc' 
-            ? a.name.localeCompare(b.name, 'cs', { sensitivity: 'base' })
-            : b.name.localeCompare(a.name, 'cs', { sensitivity: 'base' });
+          return safeSortConfig.direction === 'asc'
+            ? (a.name || '').localeCompare(b.name || '', 'cs', { sensitivity: 'base' })
+            : (b.name || '').localeCompare(a.name || '', 'cs', { sensitivity: 'base' });
         });
 
       return filteredProjects.map(p => ({
@@ -464,9 +464,9 @@ export default function GanttChart({
         })
         .sort((a, b) => {
           // Default to brand_model sort for vehicles
-          return safeSortConfig.direction === 'asc' 
-            ? a.brand_model.localeCompare(b.brand_model, 'cs', { sensitivity: 'base' })
-            : b.brand_model.localeCompare(a.brand_model, 'cs', { sensitivity: 'base' });
+          return safeSortConfig.direction === 'asc'
+            ? (a.brand_model || '').localeCompare(b.brand_model || '', 'cs', { sensitivity: 'base' })
+            : (b.brand_model || '').localeCompare(a.brand_model || '', 'cs', { sensitivity: 'base' });
         });
 
       return filteredVehicles.map(vehicle => {
