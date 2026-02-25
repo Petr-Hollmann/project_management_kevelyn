@@ -44,11 +44,12 @@ export default function UserManagement({ users, workers, onUserUpdate }) {
 
   const parsePhone = (phone) => {
     if (!phone) return { country_code: '+420', phone_number: '' };
-    const match = phone.match(/^(\+\d{2,3})(\d+)$/);
+    const stripped = phone.replace(/\s/g, '');
+    const match = stripped.match(/^(\+\d{2,4})(\d+)$/);
     if (match) {
       return { country_code: match[1], phone_number: match[2] };
     }
-    return { country_code: '+420', phone_number: phone.replace(/\D/g, '') };
+    return { country_code: '+420', phone_number: stripped.replace(/\D/g, '') };
   };
 
   const formatPhoneDisplay = (phone) => {
@@ -155,9 +156,9 @@ export default function UserManagement({ users, workers, onUserUpdate }) {
         <TableHeader>
           <TableRow>
             <TableHead>Uživatel</TableHead>
-            <TableHead>Kontakt</TableHead>
+            <TableHead className="hidden sm:table-cell">Kontakt</TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Přiřazený montážník</TableHead>
+            <TableHead className="hidden md:table-cell">Přiřazený montážník</TableHead>
             <TableHead className="text-right">Akce</TableHead>
           </TableRow>
         </TableHeader>
@@ -168,7 +169,7 @@ export default function UserManagement({ users, workers, onUserUpdate }) {
                 <div className="font-medium">{user.full_name}</div>
                 <div className="text-sm text-slate-500">{user.email}</div>
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden sm:table-cell">
                 <div className="text-sm font-mono">
                   {user.phone ? formatPhoneDisplay(user.phone) : (
                     <span className="text-slate-400 italic">Bez telefonu</span>
@@ -178,7 +179,7 @@ export default function UserManagement({ users, workers, onUserUpdate }) {
               <TableCell>
                 <RoleBadge role={user.app_role} />
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">
                 <div className="flex items-center gap-2 min-w-[180px]">
                   {editingWorkerAssignment === user.id ? (
                     <>
