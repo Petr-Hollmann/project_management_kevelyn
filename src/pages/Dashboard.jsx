@@ -279,6 +279,16 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* Quick actions + Pending invoices + Expiring documents */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <QuickActions />
+          <PendingInvoicesWidget />
+          <ExpiringDocuments
+            documents={getExpiringDocuments()}
+            isLoading={isLoading}
+          />
+        </div>
+
         {/* Gantt Chart */}
         <Card className="mb-8">
           <CardHeader>
@@ -339,25 +349,12 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Bottom Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <ResourceOverview
-              workers={workers}
-              vehicles={vehicles}
-              isLoading={isLoading}
-            />
-            <QuickActions />
-          </div>
-
-          <div className="space-y-6">
-            <PendingInvoicesWidget />
-            <ExpiringDocuments
-              documents={getExpiringDocuments()}
-              isLoading={isLoading}
-            />
-          </div>
-        </div>
+        {/* Resource Overview */}
+        <ResourceOverview
+          workers={workers}
+          vehicles={vehicles}
+          isLoading={isLoading}
+        />
       </div>
     </div>
   );
