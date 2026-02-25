@@ -64,7 +64,13 @@ export class BaseEntity {
 
   async update(id, payload) {
     // Strip auto-managed / read-only columns that Supabase won't accept in an UPDATE
-    const { id: _id, created_at, updated_at, ...cleanPayload } = payload;
+    const { id: _id, created_at, updated_at, ...rest } = payload;
+    // Convert empty strings to null — prevents unique constraint violations
+    // caused by DB triggers when a nullable field (e.g. phone) was null in DB
+    // but got coerced to "" by the form's null→"" conversion
+    const cleanPayload = Object.fromEntries(
+      Object.entries(rest).map(([k, v]) => [k, v === '' ? null : v])
+    );
     const { data, error } = await this.client
       .from(this.tableName)
       .update(cleanPayload)
