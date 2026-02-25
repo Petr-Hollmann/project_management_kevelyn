@@ -106,9 +106,10 @@ export default function Layout({ children, currentPageName }) {
         if (impersonatedId && currentUser.app_role === 'admin') {
           currentUser.worker_profile_id = impersonatedId;
           currentUser.app_role = 'installer';
-        } else if (!currentUser.app_role && currentPageName !== 'Onboarding') {
-          navigate(createPageUrl('Onboarding'), { replace: true });
-          return;
+        } else if (!currentUser.app_role) {
+          // Edge case: upsert selhal při registraci — nastavíme pending
+          await User.updateMyUserData({ app_role: 'pending' });
+          currentUser.app_role = 'pending';
         }
 
         const adminPages = ["Dashboard", "Projects", "Workers", "Vehicles", "Settings", "ProjectDetail", "WorkerDetail", "VehicleDetail", "Calendar", "Invoices", "TimesheetApproval"];
@@ -181,7 +182,7 @@ export default function Layout({ children, currentPageName }) {
   }
 
   // Special pages rendered without the sidebar layout
-  if (currentPageName === 'Onboarding' || currentPageName === 'Invoiceprint') {
+  if (currentPageName === 'Invoiceprint') {
     return children;
   }
 

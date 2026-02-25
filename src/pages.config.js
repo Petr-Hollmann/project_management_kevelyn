@@ -7,7 +7,6 @@ import Invoiceprint from './pages/Invoiceprint';
 import Invoices from './pages/Invoices';
 import MyInvoices from './pages/MyInvoices';
 import MyTimesheets from './pages/MyTimesheets';
-import Onboarding from './pages/Onboarding';
 import ProjectDetail from './pages/ProjectDetail';
 import Projects from './pages/Projects';
 import Settings from './pages/Settings';
@@ -29,7 +28,6 @@ export const PAGES = {
     "Invoices": Invoices,
     "MyInvoices": MyInvoices,
     "MyTimesheets": MyTimesheets,
-    "Onboarding": Onboarding,
     "ProjectDetail": ProjectDetail,
     "Projects": Projects,
     "Settings": Settings,
