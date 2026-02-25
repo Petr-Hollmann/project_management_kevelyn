@@ -67,7 +67,7 @@ export default function SettingsPage() {
         ) : isAdmin ? (
             <>
                 <Tabs defaultValue="users" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 gap-1">
+                  <TabsList className="grid w-full grid-cols-5 gap-1">
                     <TabsTrigger value="users" className="text-xs md:text-sm">
                       <Users className="w-4 h-4 md:mr-2" />
                       <span className="hidden sm:inline ml-1 md:ml-0">Uživatelé</span>

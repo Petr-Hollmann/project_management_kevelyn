@@ -45,7 +45,7 @@ export default function UserManagement({ users, workers, onUserUpdate }) {
   const parsePhone = (phone) => {
     if (!phone) return { country_code: '+420', phone_number: '' };
     const stripped = phone.replace(/\s/g, '');
-    const match = stripped.match(/^(\+\d{2,4})(\d+)$/);
+    const match = stripped.match(/^(\+\d{1,3})(\d+)$/);
     if (match) {
       return { country_code: match[1], phone_number: match[2] };
     }
