@@ -394,7 +394,7 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
                     <a href={formData.file_url} target="_blank" rel="noopener noreferrer">
                       <Button type="button" variant="ghost" size="sm">Zobrazit</Button>
                     </a>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({ ...formData, file_url: '' })}>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { DeleteFile(formData.file_url).catch(() => {}); setFormData({ ...formData, file_url: '' }); }}>
                       Odstranit
                     </Button>
                   </div>
@@ -439,7 +439,7 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-3">
-            <Button type="button" variant="outline" size="sm" onClick={closeForm}>Zrušit</Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => closeForm()}>Zrušit</Button>
             <Button type="button" size="sm" onClick={handleSubmit}>
               <Save className="w-4 h-4 mr-2" />
               {editingCert ? "Potvrdit úpravu" : "Přidat"}
