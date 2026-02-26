@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, ArrowLeft, Calendar, FileText, User as UserIcon, History, Phone, Mail, AlertTriangle, CreditCard, CheckCircle, Clock, AlertCircle, Download } from "lucide-react";
+import { Edit, ArrowLeft, Calendar, FileText, User as UserIcon, History, Phone, Mail, AlertTriangle, CreditCard, CheckCircle, Clock, AlertCircle, Download, KeyRound } from "lucide-react";
 import { format, isBefore, addDays, startOfMonth, endOfMonth } from "date-fns";
 import { cs } from "date-fns/locale";
 import { Link } from "react-router-dom";
@@ -21,6 +21,7 @@ import { useToast } from "@/components/ui/use-toast";
 import GanttChart from "../components/dashboard/GanttChart";
 import WorkerForm from "../components/workers/WorkerForm";
 import CurrentProjectsWidget from "../components/installer/CurrentProjectsWidget";
+import ChangePasswordDialog from "../components/ChangePasswordDialog";
 
 export default function WorkerDetail() {
   const [worker, setWorker] = useState(null);
@@ -28,6 +29,7 @@ export default function WorkerDetail() {
   const [projects, setProjects] = useState({});
   const [user, setUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [workers, setWorkers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -403,6 +405,12 @@ export default function WorkerDetail() {
                   {isOwnProfile && !isAdmin ? 'Upravit profil' : 'Upravit'}
                 </Button>
               )}
+              {isOwnProfile && !isImpersonating && (
+                <Button variant="outline" onClick={() => setShowChangePassword(true)} className="w-full">
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Změnit heslo
+                </Button>
+              )}
             </div>
 
             {/* Desktop layout - původní */}
@@ -456,12 +464,20 @@ export default function WorkerDetail() {
                   </div>
                 </div>
               </div>
-              {(isAdmin || isOwnProfile) && (
-                <Button onClick={() => handleOpenProfileTab("info")}>
-                  <Edit className="w-4 h-4 mr-2" />
-                  {isOwnProfile && !isAdmin ? 'Upravit profil' : 'Upravit'}
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {isOwnProfile && !isImpersonating && (
+                  <Button variant="outline" onClick={() => setShowChangePassword(true)}>
+                    <KeyRound className="w-4 h-4 mr-2" />
+                    Změnit heslo
+                  </Button>
+                )}
+                {(isAdmin || isOwnProfile) && (
+                  <Button onClick={() => handleOpenProfileTab("info")}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    {isOwnProfile && !isAdmin ? 'Upravit profil' : 'Upravit'}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -892,7 +908,14 @@ export default function WorkerDetail() {
           </Card>
         </div>
         
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <Dialog open={showEditModal} onOpenChange={(open) => {
+          if (!open) {
+            setShowEditModal(false);
+            setDefaultTab("info");
+            // Reload so the read-only cert card reflects changes made in the modal
+            loadWorkerData(worker.id);
+          }
+        }}>
           <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{isOwnProfile && !isAdmin ? 'Upravit můj profil' : `Upravit montážníka: ${worker.first_name} ${worker.last_name}`}</DialogTitle>
@@ -915,6 +938,8 @@ export default function WorkerDetail() {
             />
           </DialogContent>
         </Dialog>
+
+        <ChangePasswordDialog open={showChangePassword} onOpenChange={setShowChangePassword} />
 
         <Dialog open={!!previewCert} onOpenChange={() => setPreviewCert(null)}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">

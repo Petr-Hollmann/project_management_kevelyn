@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-import { Users, Loader2, Building2, FileText, DollarSign, UserCircle } from 'lucide-react';
+import { Users, Loader2, Building2, FileText, DollarSign, UserCircle, KeyRound } from 'lucide-react';
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -16,12 +16,14 @@ import CompanyProfileManagement from '../components/settings/CompanyProfileManag
 import ContractTemplateManagement from '../components/settings/ContractTemplateManagement';
 import DefaultHourlyRateManagement from '../components/settings/DefaultHourlyRateManagement';
 import RoleTestingManagement from '../components/settings/RoleTestingManagement';
+import ChangePasswordDialog from '../components/ChangePasswordDialog';
 
 export default function SettingsPage() {
   const [workers, setWorkers] = useState([]);
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const { toast } = useToast();
 
   const loadAllData = useCallback(async () => {
@@ -66,8 +68,9 @@ export default function SettingsPage() {
             </div>
         ) : isAdmin ? (
             <>
+                <ChangePasswordDialog open={showChangePassword} onOpenChange={setShowChangePassword} />
                 <Tabs defaultValue="users" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-5 gap-1">
+                  <TabsList className="grid w-full grid-cols-6 gap-1">
                     <TabsTrigger value="users" className="text-xs md:text-sm">
                       <Users className="w-4 h-4 md:mr-2" />
                       <span className="hidden sm:inline ml-1 md:ml-0">Uživatelé</span>
@@ -87,6 +90,10 @@ export default function SettingsPage() {
                     <TabsTrigger value="rates" className="text-xs md:text-sm">
                       <DollarSign className="w-4 h-4 md:mr-2" />
                       <span className="hidden sm:inline ml-1 md:ml-0">Sazby</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="heslo" className="text-xs md:text-sm">
+                      <KeyRound className="w-4 h-4 md:mr-2" />
+                      <span className="hidden sm:inline ml-1 md:ml-0">Heslo</span>
                     </TabsTrigger>
                   </TabsList>
 
@@ -172,6 +179,26 @@ export default function SettingsPage() {
                       </CardHeader>
                       <CardContent>
                         <DefaultHourlyRateManagement />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="heslo" className="mt-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <KeyRound className="w-5 h-5" />
+                          Změna hesla
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                          Změňte heslo ke svému administrátorskému účtu.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Button onClick={() => setShowChangePassword(true)}>
+                          <KeyRound className="w-4 h-4 mr-2" />
+                          Změnit heslo
+                        </Button>
                       </CardContent>
                     </Card>
                   </TabsContent>
