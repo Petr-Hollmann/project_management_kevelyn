@@ -113,11 +113,20 @@ export default function WorkerForm({
     if (activeTab === 'certs' && worker?.id) setCertKey(k => k + 1);
   }, [activeTab, worker?.id]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.worker_type === 'subcontractor' && !formData.team_leader_id) {
       toast({ variant: "destructive", title: "Chyba", description: "Subdodavatel musí být přiřazen pod vedoucího party." });
       return;
+    }
+    // Commit buffered certificate changes before saving the worker
+    if (certManagementRef.current?.commitChanges) {
+      try {
+        await certManagementRef.current.commitChanges();
+      } catch (err) {
+        toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se uložit certifikáty: " + err.message });
+        return;
+      }
     }
     onSubmit({
       ...formData,
@@ -498,6 +507,7 @@ export default function WorkerForm({
                 key={`cert-${worker.id}-${certKey}`}
                 workerId={worker.id}
                 isDetailView={isDetailView}
+                deferred={!isDetailView}
                 onShowAddForm={(visible) => {
                   setShowCertForm(visible);
                   if (visible) setActiveTab("certs");
@@ -522,7 +532,10 @@ export default function WorkerForm({
 
         {!isDetailView && !(activeTab === 'certs' && showCertForm) && (
           <div className="flex justify-end gap-3 pt-4 border-t mt-4 flex-shrink-0 bg-white">
-            <Button type="button" variant="outline" onClick={onCancel}>Zrušit</Button>
+            <Button type="button" variant="outline" onClick={async () => {
+              await certManagementRef.current?.discardChanges?.();
+              onCancel();
+            }}>Zrušit</Button>
             {worker?.id && activeTab === 'certs' && !showCertForm && (
               <Button
                 type="button"

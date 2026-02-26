@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Save, Trash2, FileText, Upload, Loader2, Download, Paperclip, AlertCircle } from "lucide-react";
 import { format, isBefore, addDays } from "date-fns";
 import { cs } from "date-fns/locale";
-import { UploadFile } from "@/integrations/Core";
+import { UploadFile, DeleteFile } from "@/integrations/Core";
 import { useToast } from "@/components/ui/use-toast";
 import {
   AlertDialog,
@@ -63,7 +63,12 @@ const getFileType = (url) => {
   return 'other';
 };
 
-const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShowAddForm }, ref) => {
+/**
+ * deferred=true  →  žádná DB operace se neprovede okamžitě.
+ *   Změny se bufferují a zapíší se teprve voláním ref.commitChanges().
+ *   Při zrušení zavoláme ref.discardChanges() — ten uklidí storage soubory.
+ */
+const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShowAddForm, deferred = false }, ref) => {
   const [certificates, setCertificates] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -74,8 +79,72 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
   const [formData, setFormData] = useState(emptyForm);
   const { toast } = useToast();
 
+  // ── Deferred-mode state ───────────────────────────────────────────────────
+  // pendingAdds   : pole nových certifikátů (nebyly zapsány do DB), mají _tempId + _isDraft
+  // pendingEdits  : { [id]: editovaná data + _originalFileUrl }
+  // pendingDeletes: Set ID certifikátů ke smazání
+  // pendingDeleteFiles: { [id]: file_url } pro pozdější cleanup storage
+  const [pendingAdds, setPendingAdds] = useState([]);
+  const [pendingEdits, setPendingEdits] = useState({});
+  const [pendingDeletes, setPendingDeletes] = useState(new Set());
+  const [pendingDeleteFiles, setPendingDeleteFiles] = useState({});
+
+  // Výsledný seznam ke zobrazení (aplikuje pending změny přes DB data)
+  const displayCerts = deferred
+    ? [
+        ...certificates
+          .filter(c => !pendingDeletes.has(c.id))
+          .map(c => pendingEdits[c.id] ? { ...c, ...pendingEdits[c.id] } : c),
+        ...pendingAdds,
+      ]
+    : certificates;
+
+  // ── Ref API ───────────────────────────────────────────────────────────────
   React.useImperativeHandle(ref, () => ({
     openAddForm: () => setShowForm(true),
+
+    /** Zapíše všechny buffered změny do DB. Volat před onSubmit v parent komponentě. */
+    commitChanges: async () => {
+      // 1) Smazání
+      for (const id of pendingDeletes) {
+        await Certificate.delete(id);
+        if (pendingDeleteFiles[id]) await DeleteFile(pendingDeleteFiles[id]).catch(() => {});
+      }
+      // 2) Přidání
+      for (const certData of pendingAdds) {
+        const { _tempId, _isDraft, ...data } = certData;
+        await Certificate.create({ ...data, worker_id: workerId });
+      }
+      // 3) Úpravy
+      for (const [id, editData] of Object.entries(pendingEdits)) {
+        const { _originalFileUrl, ...payload } = editData;
+        await Certificate.update(id, payload);
+        if (_originalFileUrl && _originalFileUrl !== payload.file_url) {
+          await DeleteFile(_originalFileUrl).catch(() => {});
+        }
+      }
+      setPendingAdds([]);
+      setPendingEdits({});
+      setPendingDeletes(new Set());
+      setPendingDeleteFiles({});
+      await loadCertificates();
+    },
+
+    /** Zahodí všechny buffered změny a uklidí nahrané storage soubory. */
+    discardChanges: async () => {
+      for (const { file_url } of pendingAdds) {
+        if (file_url) await DeleteFile(file_url).catch(() => {});
+      }
+      for (const editData of Object.values(pendingEdits)) {
+        if (editData._originalFileUrl && editData.file_url && editData._originalFileUrl !== editData.file_url) {
+          await DeleteFile(editData.file_url).catch(() => {});
+        }
+      }
+      setPendingAdds([]);
+      setPendingEdits({});
+      setPendingDeletes(new Set());
+      setPendingDeleteFiles({});
+    },
   }));
 
   useEffect(() => {
@@ -121,6 +190,33 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
       toast({ variant: "destructive", title: "Chyba", description: "Vyplňte název a datum vydání." });
       return;
     }
+
+    // ── DEFERRED MODE ───────────────────────────────────────────────────────
+    if (deferred) {
+      if (editingCert) {
+        if (editingCert._isDraft) {
+          // Editing a pending add — update it in pendingAdds
+          setPendingAdds(prev => prev.map(c =>
+            c._tempId === editingCert._tempId ? { ...c, ...formData } : c
+          ));
+        } else {
+          // Editing an existing DB cert — store in pendingEdits
+          setPendingEdits(prev => ({
+            ...prev,
+            [editingCert.id]: { ...formData, _originalFileUrl: editingCert.file_url },
+          }));
+        }
+      } else {
+        setPendingAdds(prev => [
+          ...prev,
+          { ...formData, _tempId: `draft_${Date.now()}_${Math.random()}`, _isDraft: true },
+        ]);
+      }
+      closeForm();
+      return;
+    }
+
+    // ── IMMEDIATE MODE (původní chování) ────────────────────────────────────
     try {
       const payload = {
         ...formData,
@@ -158,15 +254,39 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
   };
 
   const handleDelete = async () => {
-    if (!deletingCertId) return;
+    const certId = deletingCertId;
+    const certToDelete = displayCerts.find(c => (c._tempId ?? c.id) === certId);
+    setDeletingCertId(null);
+    if (!certId || !certToDelete) return;
+
+    // ── DEFERRED MODE ───────────────────────────────────────────────────────
+    if (deferred) {
+      if (certToDelete._isDraft) {
+        // Pending add — vyhodit z fronty a smazat storage soubor
+        setPendingAdds(prev => prev.filter(c => c._tempId !== certToDelete._tempId));
+        if (certToDelete.file_url) await DeleteFile(certToDelete.file_url).catch(() => {});
+      } else {
+        // Existující cert — zařadit ke smazání při commitu
+        setPendingDeletes(prev => new Set([...prev, certId]));
+        if (certToDelete.file_url) {
+          setPendingDeleteFiles(prev => ({ ...prev, [certId]: certToDelete.file_url }));
+        }
+        toast({ title: "Certifikát odstraněn", description: "Bude smazán po uložení formuláře." });
+      }
+      return;
+    }
+
+    // ── IMMEDIATE MODE (původní chování) ────────────────────────────────────
     try {
-      await Certificate.delete(deletingCertId);
+      await Certificate.delete(certId);
+      if (certToDelete?.file_url) {
+        await DeleteFile(certToDelete.file_url);
+      }
       toast({ title: "Úspěch", description: "Certifikát byl smazán." });
       loadCertificates();
-    } catch {
-      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se smazat certifikát." });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se smazat certifikát: " + err.message });
     }
-    setDeletingCertId(null);
   };
 
   const closeForm = () => {
@@ -262,28 +382,33 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
                     </Button>
                   </div>
                 )}
-                <Input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={handleFileUpload}
-                  disabled={isUploadingFile}
-                  className="hidden"
-                  id="cert-file-upload"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => document.getElementById('cert-file-upload').click()}
-                  disabled={isUploadingFile}
-                  className="w-full"
-                  size="sm"
-                >
-                  {isUploadingFile ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Nahrávání...</>
-                  ) : (
-                    <><Upload className="w-4 h-4 mr-2" />{formData.file_url ? 'Nahrát nový soubor' : 'Nahrát soubor (PDF, JPG, PNG)'}</>
-                  )}
-                </Button>
+                {/* Upload button — zobrazí se jen když soubor NENÍ nahrán */}
+                {!formData.file_url && (
+                  <>
+                    <Input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={handleFileUpload}
+                      disabled={isUploadingFile}
+                      className="hidden"
+                      id="cert-file-upload"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById('cert-file-upload').click()}
+                      disabled={isUploadingFile}
+                      className="w-full"
+                      size="sm"
+                    >
+                      {isUploadingFile ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Nahrávání...</>
+                      ) : (
+                        <><Upload className="w-4 h-4 mr-2" />Nahrát soubor (PDF, JPG, PNG)</>
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
             <div className="md:col-span-2">
@@ -300,23 +425,25 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
             <Button type="button" variant="outline" size="sm" onClick={closeForm}>Zrušit</Button>
             <Button type="button" size="sm" onClick={handleSubmit}>
               <Save className="w-4 h-4 mr-2" />
-              {editingCert ? "Uložit změny" : "Přidat"}
+              {editingCert ? "Potvrdit úpravu" : "Přidat"}
             </Button>
           </div>
         </div>
       )}
 
-      {certificates.length === 0 && !showForm ? (
+      {displayCerts.length === 0 && !showForm ? (
         <div className="text-center py-6 text-slate-500 bg-slate-50 rounded-lg">
           <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300" />
           <p className="text-sm">Žádné certifikáty</p>
         </div>
       ) : (
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {certificates.map((cert) => {
+          {displayCerts.map((cert) => {
             const status = getCertificateStatus(cert.expiry_date);
+            const isPending = cert._isDraft || (cert.id && pendingEdits[cert.id]);
+            const certKey = cert._tempId ?? cert.id;
             return (
-              <div key={cert.id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+              <div key={certKey} className={`p-3 border rounded-lg hover:bg-slate-50 transition-colors ${isPending ? 'border-yellow-300 bg-yellow-50' : ''}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -326,6 +453,9 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
                         <Badge variant="outline" className="text-xs">
                           {certificateTypes.find(t => t.value === cert.type)?.label}
                         </Badge>
+                      )}
+                      {isPending && (
+                        <Badge className="bg-yellow-100 text-yellow-800 text-xs border border-yellow-300">Neuloženo</Badge>
                       )}
                     </div>
                     {cert.issuer && <p className="text-xs text-slate-600">Vydavatel: {cert.issuer}</p>}
@@ -345,7 +475,7 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
                       <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(cert)} title="Upravit">
                         <FileText className="w-4 h-4" />
                       </Button>
-                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDeletingCertId(cert.id)} title="Smazat">
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDeletingCertId(certKey)} title="Smazat">
                         <Trash2 className="w-4 h-4 text-red-500" />
                       </Button>
                     </div>
