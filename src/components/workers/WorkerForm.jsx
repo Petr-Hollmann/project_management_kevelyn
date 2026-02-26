@@ -315,7 +315,7 @@ export default function WorkerForm({
                       )}
                     </div>
                   )}
-                  {canEditBasicInfo && (
+                  {canEditBasicInfo && !formData.photo_url && (
                     <>
                       <Input type="file" accept="image/*" onChange={handlePhotoUpload} disabled={isUploadingPhoto} className="hidden" id="photo-upload" />
                       <Button type="button" variant="outline" onClick={() => document.getElementById('photo-upload').click()} disabled={isUploadingPhoto} className="w-full">
