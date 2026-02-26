@@ -132,9 +132,18 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
 
     /** Zahodí všechny buffered změny a uklidí nahrané storage soubory. */
     discardChanges: async () => {
+      // Ukliď soubor z aktuálně otevřeného formuláře (pokud je otevřen při zrušení hlavního formuláře)
+      if (showForm && formData.file_url) {
+        const originalFile = editingCert?._isDraft ? null : (editingCert?.file_url ?? null);
+        if (formData.file_url !== originalFile) {
+          await DeleteFile(formData.file_url).catch(() => {});
+        }
+      }
+      // Ukliď soubory z buffered přidání
       for (const { file_url } of pendingAdds) {
         if (file_url) await DeleteFile(file_url).catch(() => {});
       }
+      // Ukliď nově nahrané soubory z buffered úprav
       for (const editData of Object.values(pendingEdits)) {
         if (editData._originalFileUrl && editData.file_url && editData._originalFileUrl !== editData.file_url) {
           await DeleteFile(editData.file_url).catch(() => {});
@@ -212,7 +221,7 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
           { ...formData, _tempId: `draft_${Date.now()}_${Math.random()}`, _isDraft: true },
         ]);
       }
-      closeForm();
+      closeForm(true);
       return;
     }
 
@@ -231,7 +240,7 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
         await Certificate.create(payload);
         toast({ title: "Úspěch", description: "Certifikát byl přidán." });
       }
-      closeForm();
+      closeForm(true);
       loadCertificates();
     } catch {
       toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se uložit certifikát." });
@@ -289,7 +298,15 @@ const CertificateManagement = React.forwardRef(({ workerId, isDetailView, onShow
     }
   };
 
-  const closeForm = () => {
+  // submitted=true → voláno po úspěšném přidání/úpravě, soubor se NESMAŽE
+  // submitted=false (výchozí) → voláno přes Zrušit, nově nahraný soubor se uklidí
+  const closeForm = (submitted = false) => {
+    if (!submitted && formData.file_url) {
+      const originalFile = editingCert?._isDraft ? null : (editingCert?.file_url ?? null);
+      if (formData.file_url !== originalFile) {
+        DeleteFile(formData.file_url).catch(() => {});
+      }
+    }
     setShowForm(false);
     setEditingCert(null);
     setFormData(emptyForm);

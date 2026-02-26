@@ -533,6 +533,10 @@ export default function WorkerForm({
         {!isDetailView && !(activeTab === 'certs' && showCertForm) && (
           <div className="flex justify-end gap-3 pt-4 border-t mt-4 flex-shrink-0 bg-white">
             <Button type="button" variant="outline" onClick={async () => {
+              // Delete newly uploaded photo if it hasn't been saved to DB yet
+              if (formData.photo_url && formData.photo_url !== (worker?.photo_url ?? '')) {
+                DeleteFile(formData.photo_url).catch(() => {});
+              }
               await certManagementRef.current?.discardChanges?.();
               onCancel();
             }}>Zrušit</Button>
