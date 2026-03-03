@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Project } from "@/entities/Project";
 import { User } from "@/entities/User";
 import { Button } from "@/components/ui/button";
-import { Plus, FolderOpen, Search } from "lucide-react";
+import { Plus, FolderOpen, Search, Download, CalendarDays } from "lucide-react";
+import { downloadProjectsICS } from "../utils/exportICS";
+import CalendarFeedDialog from "../components/projects/CalendarFeedDialog";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
@@ -18,6 +20,8 @@ import GanttChart from "../components/dashboard/GanttChart";
 import { Assignment } from "@/entities/Assignment";
 import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
+import { ProjectCost } from "@/entities/ProjectCost";
+import BudgetSummaryTable from "../components/projects/BudgetSummaryTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
 
@@ -26,6 +30,7 @@ export default function Projects() {
   const [workers, setWorkers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const [allCosts, setAllCosts] = useState([]);
   const [user, setUser] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
@@ -44,6 +49,7 @@ export default function Projects() {
 
   // New state for delete confirmation dialog
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, projectId: null });
+  const [showCalendarFeed, setShowCalendarFeed] = useState(false);
 
   // useEffect pro načítání filtrů byl odstraněn, protože usePersistentState již tuto logiku zajišťuje při inicializaci.
   // Předpokládá se, že usePersistentState je upraven tak, aby správně parsoval Date objekty, nebo že Date objekty nejsou uloženy jako stringy.
@@ -54,12 +60,13 @@ export default function Projects() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [projectsData, userData, workersData, vehiclesData, assignmentsData] = await Promise.all([
+      const [projectsData, userData, workersData, vehiclesData, assignmentsData, costsData] = await Promise.all([
         Project.list(),
         User.me().catch(() => null),
         Worker.list(),
-        Vehicle.list(), 
-        Assignment.list()
+        Vehicle.list(),
+        Assignment.list(),
+        ProjectCost.list()
       ]);
 
       // --- One-time Data Migration Script ---
@@ -122,6 +129,7 @@ export default function Projects() {
       setWorkers(workersData);
       setVehicles(vehiclesData);
       setAssignments(assignmentsData);
+      setAllCosts(costsData);
     } catch (error) {
       console.error("Error loading data:", error);
     }
@@ -253,7 +261,7 @@ export default function Projects() {
     setFilters(prev => ({ ...prev, status: newStatusFilters }));
   };
 
-  const isAdmin = true;
+  const isAdmin = user?.app_role === 'admin';
 
   // Funkce pro resetování filtrů
   const resetFilters = () => {
@@ -278,13 +286,31 @@ export default function Projects() {
             <p className="text-slate-600">Správa projektů a zakázek</p>
           </div>
           {isAdmin && (
-            <Button 
-              onClick={() => openForm()}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nový projekt
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => downloadProjectsICS(sortedAndFilteredProjects, assignments, workers, 'projekty.ics')}
+                title="Stáhnout ICS soubor pro jednorázový import"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export .ics
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowCalendarFeed(true)}
+                title="Přihlásit se k živému kalendářovému feedu (automatické aktualizace)"
+              >
+                <CalendarDays className="w-4 h-4 mr-2" />
+                Přihlásit kalendář
+              </Button>
+              <Button
+                onClick={() => openForm()}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Nový projekt
+              </Button>
+            </div>
           )}
         </div>
 
@@ -370,6 +396,11 @@ export default function Projects() {
           )}
         </div>
 
+        {/* Budget Summary Table - only for admins */}
+        {isAdmin && (
+          <BudgetSummaryTable projects={sortedAndFilteredProjects} allCosts={allCosts} />
+        )}
+
         {/* Project Form Dialog */}
         <Dialog open={showForm} onOpenChange={setShowForm}>
           <DialogContent className="max-w-[95vw] sm:max-w-2xl mx-auto max-h-[90vh] overflow-y-auto">
@@ -385,6 +416,9 @@ export default function Projects() {
             />
           </DialogContent>
         </Dialog>
+
+        {/* Calendar Feed Dialog */}
+        <CalendarFeedDialog open={showCalendarFeed} onOpenChange={setShowCalendarFeed} />
 
         {/* Confirm Delete Dialog */}
         <ConfirmDialog

@@ -5,10 +5,10 @@ import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
 import { User } from "@/entities/User";
 import { TimesheetEntry } from "@/entities/TimesheetEntry";
+import { ProjectCost } from "@/entities/ProjectCost";
 import { Button } from "@/components/ui/button";
-import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft, Edit, Printer, Share2, Calendar } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Share2, Calendar, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog";
@@ -33,9 +33,11 @@ import ProjectForm from "../components/projects/ProjectForm";
 import AssignmentForm from "../components/assignments/AssignmentForm";
 import ShareProjectDialog from "../components/projects/ShareProjectDialog";
 import ProjectTimesheets from "../components/projects/ProjectTimesheets";
+import ProjectCosts from "../components/projects/ProjectCosts";
 import { format, isBefore, isAfter, parseISO } from "date-fns";
 import { cs } from 'date-fns/locale';
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { downloadProjectsICS } from "../utils/exportICS";
 
 // Custom Conflict Dialog Component
 const ConflictDialog = ({ open, onOpenChange, details, onConfirm }) => {
@@ -111,6 +113,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState(null);
   const [assignments, setAssignments] = useState([]);
   const [timesheets, setTimesheets] = useState([]);
+  const [costs, setCosts] = useState([]);
   const [allProjects, setAllProjects] = useState([]);
   const [workers, setWorkers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -146,10 +149,11 @@ export default function ProjectDetail() {
   const loadProjectData = useCallback(async (projectId) => {
     setIsLoading(true);
     try {
-      const [projectData, assignmentsData, timesheetsData, workersData, vehiclesData, userData, allProjectsData] = await Promise.all([
+      const [projectData, assignmentsData, timesheetsData, costsData, workersData, vehiclesData, userData, allProjectsData] = await Promise.all([
         Project.list().then(projects => projects.find(p => p.id === projectId)),
         Assignment.list(),
         TimesheetEntry.filter({ project_id: projectId }, '-date'),
+        ProjectCost.filter({ project_id: projectId }, '-date'),
         Worker.list(),
         Vehicle.list(),
         User.me().catch(() => null),
@@ -163,6 +167,7 @@ export default function ProjectDetail() {
         setProject(projectData);
         setAssignments(assignmentsData);
         setTimesheets(timesheetsData);
+        setCosts(costsData);
         setAllProjects(allProjectsData);
         setWorkers(workersData);
         setVehicles(vehiclesData);
@@ -184,6 +189,17 @@ export default function ProjectDetail() {
     } catch (error) {
         console.error("Error refreshing timesheets:", error);
         toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se obnovit výkazy." });
+    }
+  }, [project?.id, toast]);
+
+  const refreshCosts = useCallback(async () => {
+    if (!project?.id) return;
+    try {
+      const costsData = await ProjectCost.filter({ project_id: project.id }, '-date');
+      setCosts(costsData);
+    } catch (error) {
+      console.error("Error refreshing costs:", error);
+      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se obnovit náklady." });
     }
   }, [project?.id, toast]);
 
@@ -472,7 +488,27 @@ export default function ProjectDetail() {
 
   const handlePrint = () => window.print();
 
-  const isAdmin = !!user;
+  const isAdmin = user?.app_role === 'admin';
+
+  const totalCostsInProjectCurrency = React.useMemo(() => {
+    const currency = project?.budget_currency || 'CZK';
+    const opCosts = costs
+      .filter(c => (c.currency || 'CZK') === currency)
+      .reduce((sum, c) => sum + Number(c.amount), 0);
+    // Mzdové náklady: sazba z přiřazení na projekt, fallback na worker.hourly_rate_domestic
+    const projectId = project?.id;
+    const laborCosts = currency === 'CZK'
+      ? timesheets
+          .filter(t => t.status === 'approved')
+          .reduce((sum, t) => {
+            const assignment = assignments.find(a => a.project_id === projectId && a.worker_id === t.worker_id);
+            const worker = workers.find(w => w.id === t.worker_id);
+            const rate = Number(assignment?.hourly_rate) || Number(worker?.hourly_rate_domestic) || 0;
+            return sum + (t.hours_worked || 0) * rate;
+          }, 0)
+      : 0;
+    return opCosts + laborCosts;
+  }, [costs, project?.budget_currency, project?.id, timesheets, workers, assignments]);
 
   const projectAssignments = React.useMemo(() => {
     return project ? assignments.filter(a => a.project_id === project.id) : [];
@@ -505,7 +541,6 @@ export default function ProjectDetail() {
               .print-badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.8rem; background-color: #e5e7eb; border: 1px solid #d1d5db; margin-right: 8px; }
             }
         `}</style>
-      <Toaster />
       <ConflictDialog
         open={conflictInfo.isOpen}
         onOpenChange={(isOpen) => setConflictInfo(prev => ({ ...prev, isOpen }))}
@@ -535,6 +570,14 @@ export default function ProjectDetail() {
               <Button variant="outline" onClick={() => setShowShareDialog(true)} className="w-full sm:w-auto">
                 <Share2 className="w-4 h-4 mr-2" /> Sdílet
               </Button>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => downloadProjectsICS([project], projectAssignments, workers, `${project.name}.ics`)}
+                title="Exportovat projekt jako ICS soubor pro import do Google / Apple / Outlook Kalendáře"
+              >
+                <Download className="w-4 h-4 mr-2" /> Export do kalendáře
+              </Button>
               <Button onClick={() => setShowProjectEditModal(true)} className="w-full sm:w-auto">
                 <Edit className="w-4 h-4 mr-2" /> Upravit projekt
               </Button>
@@ -543,7 +586,7 @@ export default function ProjectDetail() {
         </div>
 
         <div className="printable-area">
-          <ProjectDetailHeader project={project} isInstaller={!isAdmin} />
+          <ProjectDetailHeader project={project} isInstaller={!isAdmin} totalCosts={isAdmin ? totalCostsInProjectCurrency : undefined} />
           <div className="mt-8 space-y-8">
             <ResourceAssignments
               project={project}
@@ -567,6 +610,21 @@ export default function ProjectDetail() {
                 onApprove={handleApproveTimesheet}
                 onReject={handleRejectTimesheet}
                 onRevert={handleRevertTimesheet}
+              />
+            )}
+
+            {/* Náklady projektu - pouze pro administrátory */}
+            {isAdmin && (
+              <ProjectCosts
+                costs={costs}
+                isAdmin={isAdmin}
+                projectBudget={project.budget}
+                projectBudgetCurrency={project.budget_currency}
+                onCostsChanged={refreshCosts}
+                projectId={project.id}
+                timesheets={timesheets}
+                workers={workers}
+                assignments={projectAssignments}
               />
             )}
           </div>

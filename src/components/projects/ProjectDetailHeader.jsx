@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Calendar, Users, DollarSign, Car, FileText } from 'lucide-react'; // Added FileText import
 import { format } from 'date-fns';
+import { Progress } from '@/components/ui/progress';
 
 const statusColors = { preparing: "bg-gray-100 text-gray-800", in_progress: "bg-blue-100 text-blue-800", completed: "bg-green-100 text-green-800", paused: "bg-orange-100 text-orange-800" };
 const statusLabels = { preparing: "Připravuje se", in_progress: "Běží", completed: "Dokončeno", paused: "Pozastaveno" };
@@ -44,7 +45,7 @@ const formatDescription = (description) => {
   });
 };
 
-export default function ProjectDetailHeader({ project, isInstaller = false, onEdit, onDelete, onShare }) { // Added onEdit, onDelete, onShare props
+export default function ProjectDetailHeader({ project, isInstaller = false, totalCosts, onEdit, onDelete, onShare }) {
   const totalRequiredWorkers = project.required_workers?.reduce((sum, req) => sum + req.count, 0) || 0;
   
   return (
@@ -98,9 +99,27 @@ export default function ProjectDetailHeader({ project, isInstaller = false, onEd
           {!isInstaller && project.budget && (
             <div className="flex items-start gap-2">
               <DollarSign className="w-4 h-4 mt-1 text-slate-400" />
-              <div>
+              <div className="flex-1">
                 <p className="font-medium text-slate-700">Rozpočet</p>
-                <p>{project.budget.toLocaleString('cs-CZ')} Kč</p>
+                <p>{project.budget.toLocaleString('cs-CZ')} {project.budget_currency || 'CZK'}</p>
+                {totalCosts !== undefined && project.budget > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span>Náklady: {totalCosts.toLocaleString('cs-CZ')} {project.budget_currency || 'CZK'}</span>
+                      <span>{Math.round((totalCosts / project.budget) * 100)} %</span>
+                    </div>
+                    <Progress
+                      value={Math.min((totalCosts / project.budget) * 100, 100)}
+                      className={
+                        totalCosts > project.budget
+                          ? '[&>div]:bg-red-500'
+                          : totalCosts / project.budget > 0.8
+                          ? '[&>div]:bg-orange-400'
+                          : '[&>div]:bg-green-500'
+                      }
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

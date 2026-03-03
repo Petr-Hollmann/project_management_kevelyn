@@ -239,6 +239,9 @@ export default function TimesheetForm({ project = null, worker, assignments = []
   useEffect(() => {
     if (!worker || !workerProjects || !selectedProjectId) return;
 
+    // Při editaci existujícího záznamu neprovádět reset — projekt byl platný při uložení
+    if (entry && selectedProjectId === entry.project_id) return;
+
     try {
       // Vytáhnout všechna platná ID projektů z workerProjects
       const allAvailableProjectIds = Object.values(workerProjects)
@@ -255,7 +258,7 @@ export default function TimesheetForm({ project = null, worker, assignments = []
       console.error("Error validating selected project:", error);
       setSelectedProjectId('');
     }
-  }, [workerProjects, selectedProjectId, worker]);
+  }, [workerProjects, selectedProjectId, worker, entry]);
 
   const statusLabels = {
     preparing: 'Příprava',

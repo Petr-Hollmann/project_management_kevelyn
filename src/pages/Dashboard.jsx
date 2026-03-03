@@ -32,6 +32,7 @@ import ExpiringDocuments from "../components/dashboard/ExpiringDocuments";
 import ResourceOverview from "../components/dashboard/ResourceOverview";
 import QuickActions from "../components/dashboard/QuickActions";
 import PendingInvoicesWidget from "../components/dashboard/PendingInvoicesWidget";
+import BirthdayNotifications from "../components/dashboard/BirthdayNotifications";
 
 const projectStatusOptions = [
   { value: "preparing", label: "Připravuje se" },
@@ -44,6 +45,7 @@ const workerAvailabilityOptions = [
   { value: "available", label: "Dostupný" },
   { value: "on_vacation", label: "Dovolená" },
   { value: "sick", label: "Nemoc" },
+  { value: "terminated", label: "Ukončená spolupráce" },
 ];
 
 const workerSeniorityOptions = [
@@ -285,12 +287,16 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Quick actions + Pending invoices + Expiring documents */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Quick actions + Pending invoices + Expiring documents + Birthdays */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <QuickActions />
           <PendingInvoicesWidget />
           <ExpiringDocuments
             documents={getExpiringDocuments()}
+            isLoading={isLoading}
+          />
+          <BirthdayNotifications
+            workers={workers}
             isLoading={isLoading}
           />
         </div>
