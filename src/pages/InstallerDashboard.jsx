@@ -38,13 +38,14 @@ export default function InstallerDashboard() {
   const [selectedProject, setSelectedProject] = useState(null);
   const { toast } = useToast();
 
-  const logError = async (context, err, userId, workerId) => {
+  const logAccess = async ({ context, status, err, userId, workerId }) => {
     try {
       await supabase.from('app_error_log').insert({
         user_id: userId || null,
         worker_id: workerId || null,
         context,
-        error_msg: err?.message || String(err),
+        status,
+        error_msg: err ? (err?.message || String(err)) : null,
         user_agent: navigator.userAgent,
       });
     } catch (_) {
@@ -68,7 +69,7 @@ export default function InstallerDashboard() {
 
         if (!effectiveWorkerId) {
           const msg = "Uživatelský účet není propojen s profilem montážníka.";
-          await logError('missing_worker_profile', new Error(msg), currentUser?.id, null);
+          await logAccess({ context: 'missing_worker_profile', status: 'error', err: new Error(msg), userId: currentUser?.id, workerId: null });
           setError("Váš uživatelský účet není propojen s žádným profilem montážníka. Obraťte se na administrátora.");
           setIsLoading(false);
           return;
@@ -104,9 +105,12 @@ export default function InstallerDashboard() {
           return isBefore(expiryDate, warningDate) && !isBefore(expiryDate, today);
         });
         setExpiringCertificates(expiring);
+
+        // Zalogovat úspěšné načtení
+        await logAccess({ context: 'installer_dashboard_load', status: 'success', userId: currentUser?.id, workerId: effectiveWorkerId });
       } catch (err) {
         console.error("Error fetching installer data:", err);
-        await logError('installer_dashboard_load', err, currentUser?.id, effectiveWorkerId);
+        await logAccess({ context: 'installer_dashboard_load', status: 'error', err, userId: currentUser?.id, workerId: effectiveWorkerId });
         setError(`Nepodařilo se načíst data. Chyba: ${err?.message || 'Neznámá chyba'}. Zkuste stránku obnovit.`);
       }
       setIsLoading(false);
