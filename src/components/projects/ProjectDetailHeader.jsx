@@ -45,7 +45,7 @@ const formatDescription = (description) => {
   });
 };
 
-export default function ProjectDetailHeader({ project, isInstaller = false, totalCosts, onEdit, onDelete, onShare }) {
+export default function ProjectDetailHeader({ project, isInstaller = false, totalCostsCZK, budgetCZK, onEdit, onDelete, onShare }) {
   const totalRequiredWorkers = project.required_workers?.reduce((sum, req) => sum + req.count, 0) || 0;
   
   return (
@@ -101,19 +101,26 @@ export default function ProjectDetailHeader({ project, isInstaller = false, tota
               <DollarSign className="w-4 h-4 mt-1 text-slate-400" />
               <div className="flex-1">
                 <p className="font-medium text-slate-700">Rozpočet</p>
-                <p>{project.budget.toLocaleString('cs-CZ')} {project.budget_currency || 'CZK'}</p>
-                {totalCosts !== undefined && project.budget > 0 && (
+                <p>
+                  {project.budget.toLocaleString('cs-CZ')} {project.budget_currency || 'CZK'}
+                  {project.budget_currency && project.budget_currency !== 'CZK' && budgetCZK > 0 && (
+                    <span className="text-xs text-slate-400 ml-1">
+                      (≈ {Math.round(budgetCZK).toLocaleString('cs-CZ')} CZK)
+                    </span>
+                  )}
+                </p>
+                {totalCostsCZK !== undefined && budgetCZK > 0 && (
                   <div className="mt-2 space-y-1">
                     <div className="flex justify-between text-xs text-slate-500">
-                      <span>Náklady: {totalCosts.toLocaleString('cs-CZ')} {project.budget_currency || 'CZK'}</span>
-                      <span>{Math.round((totalCosts / project.budget) * 100)} %</span>
+                      <span>Náklady: {totalCostsCZK.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CZK</span>
+                      <span>{Math.round((totalCostsCZK / budgetCZK) * 100)} %</span>
                     </div>
                     <Progress
-                      value={Math.min((totalCosts / project.budget) * 100, 100)}
+                      value={Math.min((totalCostsCZK / budgetCZK) * 100, 100)}
                       className={
-                        totalCosts > project.budget
+                        totalCostsCZK > budgetCZK
                           ? '[&>div]:bg-red-500'
-                          : totalCosts / project.budget > 0.8
+                          : totalCostsCZK / budgetCZK > 0.8
                           ? '[&>div]:bg-orange-400'
                           : '[&>div]:bg-green-500'
                       }

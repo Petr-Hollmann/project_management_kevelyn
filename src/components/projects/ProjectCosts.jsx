@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,12 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { TrendingUp, Plus, Edit, Trash2, Calendar, Users } from 'lucide-react';
+import { TrendingUp, Plus, Edit, Trash2, Calendar, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ProjectCost } from '@/entities/ProjectCost';
+import { fetchCNBRate } from '@/lib/cnb';
 
 const CATEGORIES = {
   accommodation:  'Ubytování',
@@ -41,7 +42,7 @@ const EMPTY_FORM = {
 };
 
 function formatAmount(amount, currency) {
-  return `${Number(amount).toLocaleString('cs-CZ')} ${currency}`;
+  return `${Number(amount).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
 export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBudgetCurrency, onCostsChanged, projectId, timesheets = [], workers = [], assignments = [] }) {
@@ -51,6 +52,49 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, costId: null });
   const { toast } = useToast();
+
+  // Exchange rate state (for the form)
+  const [exchangeRate, setExchangeRate] = useState(1);
+  const [loadingRate, setLoadingRate] = useState(false);
+  const [rateError, setRateError] = useState(null);
+  const [manualRate, setManualRate] = useState('');
+
+  // Fetch CNB rate when currency or date changes in form
+  useEffect(() => {
+    if (!dialogOpen) return;
+    if (formData.currency === 'CZK') {
+      setExchangeRate(1);
+      setRateError(null);
+      setManualRate('');
+      return;
+    }
+    if (!formData.date) return;
+
+    let cancelled = false;
+    setLoadingRate(true);
+    setRateError(null);
+    setManualRate('');
+
+    fetchCNBRate(formData.currency, formData.date)
+      .then(rate => {
+        if (!cancelled) {
+          setExchangeRate(rate);
+          setLoadingRate(false);
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setRateError(`Kurz se nepodařilo načíst: ${err.message}. Zadejte kurz ručně.`);
+          setExchangeRate(1);
+          setLoadingRate(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [formData.currency, formData.date, dialogOpen]);
+
+  // Effective rate: manual override takes priority
+  const effectiveRate = manualRate ? parseFloat(manualRate) || 1 : exchangeRate;
 
   // Mzdové náklady — schválené hodiny × sazba z přiřazení (a.hourly_rate), fallback na worker.hourly_rate_domestic
   const laborCosts = useMemo(() => {
@@ -81,34 +125,25 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
   const totalLaborApproved = laborCosts.reduce((sum, item) => sum + item.approvedCost, 0);
   const totalLaborPending = laborCosts.reduce((sum, item) => sum + item.pendingCost, 0);
 
-  // Součty provozních nákladů per měna
-  const totalsByCurrency = costs.reduce((acc, cost) => {
-    const cur = cost.currency || 'CZK';
-    acc[cur] = (acc[cur] || 0) + Number(cost.amount);
-    return acc;
-  }, {});
+  // Součty provozních nákladů v CZK (amount_czk fallback na amount)
+  const totalOperationalCZK = costs.reduce((sum, c) => sum + Number(c.amount_czk ?? c.amount), 0);
 
-  // Součty per kategorie
-  const totalsByCategory = costs.reduce((acc, cost) => {
+  // Součty per kategorie v CZK
+  const totalsByCategoryKc = costs.reduce((acc, cost) => {
     const cat = cost.category;
-    const cur = cost.currency || 'CZK';
-    if (!acc[cat]) acc[cat] = {};
-    acc[cat][cur] = (acc[cat][cur] || 0) + Number(cost.amount);
+    acc[cat] = (acc[cat] || 0) + Number(cost.amount_czk ?? cost.amount);
     return acc;
   }, {});
 
-  // Celkový součet: mzdové náklady (CZK) + provozní náklady per měna
-  const grandTotalsByCurrency = { ...totalsByCurrency };
-  if (totalLaborApproved > 0) {
-    grandTotalsByCurrency['CZK'] = (grandTotalsByCurrency['CZK'] || 0) + totalLaborApproved;
-  }
-  const totalSummary = Object.entries(grandTotalsByCurrency)
-    .map(([cur, sum]) => formatAmount(sum, cur))
-    .join(' + ') || '0 CZK';
+  // Celkový součet v CZK
+  const grandTotalCZK = totalOperationalCZK + totalLaborApproved;
 
   const openAdd = () => {
     setEditingCost(null);
     setFormData(EMPTY_FORM);
+    setExchangeRate(1);
+    setRateError(null);
+    setManualRate('');
     setDialogOpen(true);
   };
 
@@ -121,6 +156,11 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
       amount: String(cost.amount),
       currency: cost.currency || 'CZK',
     });
+    // Pre-fill exchange rate from stored value
+    const storedRate = Number(cost.exchange_rate) || 1;
+    setExchangeRate(storedRate);
+    setManualRate(cost.currency !== 'CZK' && storedRate !== 1 ? String(storedRate) : '');
+    setRateError(null);
     setDialogOpen(true);
   };
 
@@ -134,6 +174,13 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
       toast({ variant: 'destructive', title: 'Chyba', description: 'Zadejte platnou kladnou částku.' });
       return;
     }
+    if (formData.currency !== 'CZK' && loadingRate) {
+      toast({ variant: 'destructive', title: 'Počkejte', description: 'Načítám kurz CNB...' });
+      return;
+    }
+
+    const rate = effectiveRate > 0 ? effectiveRate : 1;
+    const amount_czk = Math.round(amount * rate * 100) / 100;
 
     setIsSaving(true);
     try {
@@ -143,6 +190,8 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
         description: formData.description || null,
         amount,
         currency: formData.currency,
+        exchange_rate: rate,
+        amount_czk,
         project_id: projectId,
       };
 
@@ -177,6 +226,12 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
 
   const hasAnyData = laborCosts.length > 0 || costs.length > 0;
 
+  // CZK preview in form
+  const amountNum = parseFloat(formData.amount) || 0;
+  const previewCZK = amountNum > 0 && formData.currency !== 'CZK' && effectiveRate > 0
+    ? amountNum * effectiveRate
+    : null;
+
   return (
     <>
       <Card>
@@ -188,7 +243,7 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
             </CardTitle>
             <div className="flex items-center gap-3">
               <div className="text-right">
-                <div className="text-xl font-bold text-slate-800">{totalSummary}</div>
+                <div className="text-xl font-bold text-slate-800">{formatAmount(grandTotalCZK, 'CZK')}</div>
                 <div className="text-xs text-slate-500">celkem náklady</div>
               </div>
               {isAdmin && (
@@ -236,7 +291,6 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
                               {rate > 0 ? (
                                 <span title={rateSource === 'worker' ? 'Sazba z profilu montážníka' : 'Sazba z přiřazení na projekt'}>
                                   {formatAmount(rate, 'CZK')}
-                                  {rateSource === 'worker' && <span className="ml-1 text-xs text-slate-400">(profil)</span>}
                                 </span>
                               ) : <span className="text-slate-400 italic">nenastavena</span>}
                             </TableCell>
@@ -268,18 +322,15 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
                 <div className={laborCosts.length > 0 ? 'border-t pt-6' : ''}>
                   <h3 className="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wide">Provozní náklady</h3>
 
-                  {/* Souhrn per kategorie */}
+                  {/* Souhrn per kategorie v CZK */}
                   <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2">
                     {Object.entries(CATEGORIES).map(([key, label]) => {
-                      const catTotals = totalsByCategory[key];
-                      if (!catTotals) return null;
-                      const catSummary = Object.entries(catTotals)
-                        .map(([cur, sum]) => formatAmount(sum, cur))
-                        .join(' + ');
+                      const catTotal = totalsByCategoryKc[key];
+                      if (!catTotal) return null;
                       return (
                         <div key={key} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
                           <Badge className={`${CATEGORY_COLORS[key]} text-xs shrink-0`}>{label}</Badge>
-                          <span className="text-sm font-semibold text-slate-800 ml-2 text-right">{catSummary}</span>
+                          <span className="text-sm font-semibold text-slate-800 ml-2 text-right">{formatAmount(catTotal, 'CZK')}</span>
                         </div>
                       );
                     })}
@@ -313,7 +364,12 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
                             </TableCell>
                             <TableCell className="text-sm text-slate-700">{cost.description || '—'}</TableCell>
                             <TableCell className="text-right font-semibold whitespace-nowrap">
-                              {formatAmount(cost.amount, cost.currency || 'CZK')}
+                              <span>{formatAmount(cost.amount, cost.currency || 'CZK')}</span>
+                              {cost.currency && cost.currency !== 'CZK' && cost.amount_czk && (
+                                <div className="text-xs text-slate-400 font-normal">
+                                  = {formatAmount(cost.amount_czk, 'CZK')}
+                                </div>
+                              )}
                             </TableCell>
                             {isAdmin && (
                               <TableCell>
@@ -336,6 +392,11 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
                         ))}
                       </TableBody>
                     </Table>
+                  </div>
+
+                  <div className="flex justify-end items-center gap-4 mt-2 pt-2 border-t text-sm">
+                    <span className="text-slate-500">Celkem provozní náklady:</span>
+                    <span className="font-bold text-slate-800">{formatAmount(totalOperationalCZK, 'CZK')}</span>
                   </div>
                 </div>
               )}
@@ -424,10 +485,50 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
                 </Select>
               </div>
             </div>
+
+            {/* Exchange rate info (only for non-CZK) */}
+            {formData.currency !== 'CZK' && (
+              <div className="rounded-lg bg-slate-50 px-3 py-2 space-y-1.5 text-sm">
+                {loadingRate ? (
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Načítám kurz CNB...
+                  </div>
+                ) : rateError ? (
+                  <div className="space-y-1.5">
+                    <p className="text-amber-600 text-xs">{rateError}</p>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="manual-rate" className="text-xs whitespace-nowrap">Kurz CZK/{formData.currency}:</Label>
+                      <Input
+                        id="manual-rate"
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={manualRate}
+                        onChange={e => setManualRate(e.target.value)}
+                        placeholder={`např. 25.34`}
+                        className="h-7 text-sm"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>Kurz CNB ke dni {formData.date}:</span>
+                    <span className="font-semibold">{effectiveRate.toLocaleString('cs-CZ', { minimumFractionDigits: 3, maximumFractionDigits: 4 })} CZK/{formData.currency}</span>
+                  </div>
+                )}
+                {previewCZK !== null && !loadingRate && (
+                  <div className="flex items-center justify-between text-slate-700 border-t pt-1.5">
+                    <span>Ekvivalent v CZK:</span>
+                    <span className="font-bold text-blue-700">{previewCZK.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CZK</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Zrušit</Button>
-            <Button onClick={handleSave} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={handleSave} disabled={isSaving || loadingRate} className="bg-blue-600 hover:bg-blue-700">
               {isSaving ? 'Ukládám...' : (editingCost ? 'Uložit změny' : 'Přidat')}
             </Button>
           </DialogFooter>

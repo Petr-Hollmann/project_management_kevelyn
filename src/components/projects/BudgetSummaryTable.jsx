@@ -3,20 +3,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { BarChart2 } from 'lucide-react';
 
-export default function BudgetSummaryTable({ projects, allCosts }) {
+export default function BudgetSummaryTable({ projects, allCosts, cnbRates = {} }) {
   const rows = useMemo(() => {
     return projects
       .filter(p => p.budget && p.budget > 0)
       .map(p => {
-        const currency = p.budget_currency || 'CZK';
-        const costs = allCosts
-          .filter(c => c.project_id === p.id && (c.currency || 'CZK') === currency)
-          .reduce((sum, c) => sum + Number(c.amount), 0);
-        const pct = (costs / p.budget) * 100;
-        return { project: p, costs, budget: p.budget, currency, pct };
+        const budgetCurrency = p.budget_currency || 'CZK';
+        const rate = budgetCurrency === 'CZK' ? 1 : (cnbRates[budgetCurrency] ?? 1);
+        const budgetCZK = p.budget * rate;
+        // Sum all costs in CZK using amount_czk (fallback to amount for old records)
+        const costsCZK = allCosts
+          .filter(c => c.project_id === p.id)
+          .reduce((sum, c) => sum + Number(c.amount_czk ?? c.amount), 0);
+        const pct = budgetCZK > 0 ? (costsCZK / budgetCZK) * 100 : 0;
+        return { project: p, costsCZK, budgetCZK, budgetCurrency, budget: p.budget, pct };
       })
       .sort((a, b) => b.pct - a.pct);
-  }, [projects, allCosts]);
+  }, [projects, allCosts, cnbRates]);
 
   if (rows.length === 0) return null;
 
@@ -41,14 +44,17 @@ export default function BudgetSummaryTable({ projects, allCosts }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ project, costs, budget, currency, pct }) => (
+              {rows.map(({ project, costsCZK, budgetCZK, budgetCurrency, budget, pct }) => (
                 <tr key={project.id} className="border-b last:border-0">
                   <td className="py-3 pr-4 font-medium text-slate-800">{project.name}</td>
                   <td className="py-3 text-right whitespace-nowrap text-slate-600">
-                    {budget.toLocaleString('cs-CZ')} {currency}
+                    {budget.toLocaleString('cs-CZ')} {budgetCurrency}
+                    {budgetCurrency !== 'CZK' && (
+                      <div className="text-xs text-slate-400">≈ {Math.round(budgetCZK).toLocaleString('cs-CZ')} CZK</div>
+                    )}
                   </td>
                   <td className="py-3 text-right whitespace-nowrap text-slate-700 font-medium">
-                    {costs.toLocaleString('cs-CZ')} {currency}
+                    {costsCZK.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CZK
                   </td>
                   <td className="py-3 pl-4 w-40">
                     <Progress

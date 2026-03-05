@@ -22,6 +22,7 @@ import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
 import { ProjectCost } from "@/entities/ProjectCost";
 import BudgetSummaryTable from "../components/projects/BudgetSummaryTable";
+import { fetchTodayCNBRates } from "@/lib/cnb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
 
@@ -31,6 +32,7 @@ export default function Projects() {
   const [vehicles, setVehicles] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [allCosts, setAllCosts] = useState([]);
+  const [cnbRates, setCnbRates] = useState({});
   const [user, setUser] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
@@ -130,6 +132,16 @@ export default function Projects() {
       setVehicles(vehiclesData);
       setAssignments(assignmentsData);
       setAllCosts(costsData);
+
+      // Fetch CNB rates for foreign budget currencies
+      const foreignCurrencies = [...new Set(
+        migratedProjectsData
+          .map(p => p.budget_currency)
+          .filter(c => c && c !== 'CZK')
+      )];
+      if (foreignCurrencies.length > 0) {
+        fetchTodayCNBRates(foreignCurrencies).then(setCnbRates).catch(() => {});
+      }
     } catch (error) {
       console.error("Error loading data:", error);
     }
@@ -398,7 +410,7 @@ export default function Projects() {
 
         {/* Budget Summary Table - only for admins */}
         {isAdmin && (
-          <BudgetSummaryTable projects={sortedAndFilteredProjects} allCosts={allCosts} />
+          <BudgetSummaryTable projects={sortedAndFilteredProjects} allCosts={allCosts} cnbRates={cnbRates} />
         )}
 
         {/* Project Form Dialog */}

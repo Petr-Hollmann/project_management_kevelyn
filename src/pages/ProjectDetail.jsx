@@ -38,6 +38,7 @@ import { format, isBefore, isAfter, parseISO } from "date-fns";
 import { cs } from 'date-fns/locale';
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { downloadProjectsICS } from "../utils/exportICS";
+import { fetchCNBRate } from "@/lib/cnb";
 
 // Custom Conflict Dialog Component
 const ConflictDialog = ({ open, onOpenChange, details, onConfirm }) => {
@@ -133,6 +134,7 @@ export default function ProjectDetail() {
   // State for custom conflict dialog
   const [conflictInfo, setConflictInfo] = useState({ isOpen: false, details: null, onConfirm: () => {} });
 
+  const [budgetExchangeRate, setBudgetExchangeRate] = useState(1);
   const [rejectDialog, setRejectDialog] = useState({ open: false, entryId: null, reason: '' });
   const [approveDialog, setApproveDialog] = useState({ open: false, entryId: null });
   // New state for revert dialog
@@ -172,6 +174,16 @@ export default function ProjectDetail() {
         setWorkers(workersData);
         setVehicles(vehiclesData);
         setUser(userData);
+
+        // Fetch budget exchange rate if budget is not in CZK
+        if (projectData.budget_currency && projectData.budget_currency !== 'CZK') {
+          const today = new Date().toISOString().split('T')[0];
+          fetchCNBRate(projectData.budget_currency, today)
+            .then(rate => setBudgetExchangeRate(rate))
+            .catch(() => setBudgetExchangeRate(1));
+        } else {
+          setBudgetExchangeRate(1);
+        }
       }
     } catch (error) {
       console.error("Error loading project data:", error);
@@ -490,25 +502,23 @@ export default function ProjectDetail() {
 
   const isAdmin = user?.app_role === 'admin';
 
-  const totalCostsInProjectCurrency = React.useMemo(() => {
-    const currency = project?.budget_currency || 'CZK';
-    const opCosts = costs
-      .filter(c => (c.currency || 'CZK') === currency)
-      .reduce((sum, c) => sum + Number(c.amount), 0);
-    // Mzdové náklady: sazba z přiřazení na projekt, fallback na worker.hourly_rate_domestic
+  // Total costs always in CZK (using stored amount_czk for non-CZK costs)
+  const totalCostsCZK = React.useMemo(() => {
     const projectId = project?.id;
-    const laborCosts = currency === 'CZK'
-      ? timesheets
-          .filter(t => t.status === 'approved')
-          .reduce((sum, t) => {
-            const assignment = assignments.find(a => a.project_id === projectId && a.worker_id === t.worker_id);
-            const worker = workers.find(w => w.id === t.worker_id);
-            const rate = Number(assignment?.hourly_rate) || Number(worker?.hourly_rate_domestic) || 0;
-            return sum + (t.hours_worked || 0) * rate;
-          }, 0)
-      : 0;
+    const opCosts = costs.reduce((sum, c) => sum + Number(c.amount_czk ?? c.amount), 0);
+    const laborCosts = timesheets
+      .filter(t => t.status === 'approved')
+      .reduce((sum, t) => {
+        const assignment = assignments.find(a => a.project_id === projectId && a.worker_id === t.worker_id);
+        const worker = workers.find(w => w.id === t.worker_id);
+        const rate = Number(assignment?.hourly_rate) || Number(worker?.hourly_rate_domestic) || 0;
+        return sum + (t.hours_worked || 0) * rate;
+      }, 0);
     return opCosts + laborCosts;
-  }, [costs, project?.budget_currency, project?.id, timesheets, workers, assignments]);
+  }, [costs, project?.id, timesheets, workers, assignments]);
+
+  // Budget converted to CZK (for progress bar comparison)
+  const budgetCZK = (project?.budget || 0) * budgetExchangeRate;
 
   const projectAssignments = React.useMemo(() => {
     return project ? assignments.filter(a => a.project_id === project.id) : [];
@@ -586,7 +596,7 @@ export default function ProjectDetail() {
         </div>
 
         <div className="printable-area">
-          <ProjectDetailHeader project={project} isInstaller={!isAdmin} totalCosts={isAdmin ? totalCostsInProjectCurrency : undefined} />
+          <ProjectDetailHeader project={project} isInstaller={!isAdmin} totalCostsCZK={isAdmin ? totalCostsCZK : undefined} budgetCZK={isAdmin ? budgetCZK : undefined} />
           <div className="mt-8 space-y-8">
             <ResourceAssignments
               project={project}

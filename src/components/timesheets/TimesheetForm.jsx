@@ -6,12 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Calendar as CalendarIcon, Save, AlertTriangle, Info, Send } from 'lucide-react';
+import { Save, AlertTriangle, Info, Send } from 'lucide-react';
 import { format, isWithinInterval } from 'date-fns';
-import { cs } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function TimesheetForm({ project = null, worker, assignments = [], projects = [], entry = null, onSubmit, onCancel }) {
@@ -331,26 +328,17 @@ export default function TimesheetForm({ project = null, worker, assignments = []
       <div className="grid grid-cols-1 gap-4">
         <div className="space-y-2">
           <Label htmlFor="date">Datum *</Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant={'outline'}
-                className="w-full justify-start text-left font-normal"
-              >
-                <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{date ? format(date, 'PPP', { locale: cs }) : 'Vyberte datum'}</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                initialFocus
-                locale={cs}
-              />
-            </PopoverContent>
-          </Popover>
+          <Input
+            id="date"
+            type="date"
+            value={date ? format(date, 'yyyy-MM-dd') : ''}
+            onChange={(e) => {
+              if (e.target.value) setDate(new Date(e.target.value + 'T00:00:00'));
+              else setDate(null);
+            }}
+            required
+            className="w-full"
+          />
         </div>
 
         <div className="space-y-2">

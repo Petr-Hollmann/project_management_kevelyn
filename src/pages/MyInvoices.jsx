@@ -20,7 +20,6 @@ import { PlusCircle, FileText, Download, Eye, CheckCircle, XCircle, Clock, Dolla
 import { format } from "date-fns";
 import { cs } from "date-fns/locale";
 import { useToast } from "@/components/ui/use-toast";
-import { Toaster } from "@/components/ui/toaster";
 
 const createPageUrl = (pageName) => {
   return `/${pageName.toLowerCase()}`;
@@ -1043,7 +1042,6 @@ export default function MyInvoices() {
           </DialogContent>
         </Dialog>
       </div>
-      <Toaster />
     </div>
   );
 }

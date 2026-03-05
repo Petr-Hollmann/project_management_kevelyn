@@ -7,7 +7,6 @@ import { Assignment } from "@/entities/Assignment"; // PŘIDÁNO
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sheet, FileText, AlertTriangle, FileEdit, Send, CheckCircle, XCircle, Briefcase, PlusCircle, Car } from "lucide-react";
-import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/components/ui/use-toast";
 import TimesheetList from "../components/timesheets/TimesheetList";
 import TimesheetForm from "../components/timesheets/TimesheetForm";
@@ -31,6 +30,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/lib/supabase-client";
+
+const logAccess = async ({ context, status, err = null, userId = null, workerId = null }) => {
+  try {
+    await supabase.from('app_error_log').insert({
+      user_id: userId || null,
+      worker_id: workerId || null,
+      context,
+      status,
+      error_msg: err ? (err?.message || String(err)) : null,
+      user_agent: navigator.userAgent,
+    });
+  } catch (_) {}
+};
 
 export default function MyTimesheets() {
   const [worker, setWorker] = useState(null);
@@ -149,6 +162,7 @@ export default function MyTimesheets() {
       }
 
       if (!effectiveWorkerId) {
+        await logAccess({ context: 'my_timesheets_load', status: 'error', err: new Error('missing_worker_profile'), userId: currentUser.id });
         setError("Váš účet není propojen s profilem montážníka.");
         setIsLoading(false);
         return;
@@ -166,6 +180,7 @@ export default function MyTimesheets() {
         timesheetEntries = await TimesheetEntry.filter({ worker_id: effectiveWorkerId }, '-date');
       } catch (timesheetError) {
         console.error("Error loading timesheets:", timesheetError);
+        await logAccess({ context: 'my_timesheets_load', status: 'error', err: timesheetError, userId: currentUser.id, workerId: effectiveWorkerId });
         // Continue anyway with empty timesheets
         toast({
           variant: "destructive",
@@ -180,8 +195,10 @@ export default function MyTimesheets() {
       setEntries(timesheetEntries);
       setProjects(projectsById);
       setAssignments(allAssignments); // PŘIDÁNO
+      await logAccess({ context: 'my_timesheets_load', status: 'success', userId: currentUser.id, workerId: effectiveWorkerId });
     } catch (err) {
       console.error("Error fetching timesheet data:", err);
+      await logAccess({ context: 'my_timesheets_load', status: 'error', err });
       setError("Nepodařilo se načíst data. Zkuste to prosím znovu.");
     }
     setIsLoading(false);
@@ -319,7 +336,6 @@ export default function MyTimesheets() {
 
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
-        <Toaster />
         <div className="max-w-6xl mx-auto">
             {/* Header - responzivní */}
             <header className="mb-6 md:mb-8">
