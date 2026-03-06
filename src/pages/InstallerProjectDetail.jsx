@@ -4,8 +4,10 @@ import { Assignment } from "@/entities/Assignment";
 import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
 import { User } from "@/entities/User";
+import { Task } from "@/entities/Task";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Calendar, Users, Car } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Users, Car, CheckSquare, Check } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,9 +79,11 @@ export default function InstallerProjectDetail() {
   const [assignments, setAssignments] = useState([]);
   const [workers, setWorkers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const loadProjectData = async () => {
@@ -93,12 +97,13 @@ export default function InstallerProjectDetail() {
           return;
         }
 
-        const [projectData, assignmentsData, workersData, vehiclesData, userData] = await Promise.all([
+        const [projectData, assignmentsData, workersData, vehiclesData, userData, tasksData] = await Promise.all([
           Project.list().then(projects => projects.find(p => p.id === projectId)),
           Assignment.list(),
           Worker.list(),
           Vehicle.list(),
           User.me().catch(() => null),
+          Task.filterByProject(projectId).catch(() => []),
         ]);
 
         // Zkontroluj, zda je admin
@@ -114,6 +119,8 @@ export default function InstallerProjectDetail() {
           setWorkers(workersData);
           setVehicles(vehiclesData);
           setCurrentUser(userData);
+          // RLS ensures installer only sees their own tasks
+          setTasks(tasksData);
         }
       } catch (error) {
         console.error("Error loading project data:", error);
@@ -143,6 +150,20 @@ export default function InstallerProjectDetail() {
       }))
       .filter(item => item.vehicle);
   }, [assignments, vehicles]);
+
+  const handleCompleteTask = async (task) => {
+    try {
+      await Task.update(task.id, {
+        status: 'completed',
+        completed_by_user_id: currentUser?.id || null,
+        completed_at: new Date().toISOString(),
+      });
+      toast({ title: 'Hotovo', description: 'Úkol byl splněn.' });
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed', completed_by_user_id: currentUser?.id, completed_at: new Date().toISOString() } : t));
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se aktualizovat úkol.' });
+    }
+  };
 
   if (isLoading) {
     return <div className="p-8 text-center">Načítání detailu projektu...</div>;
@@ -215,6 +236,82 @@ export default function InstallerProjectDetail() {
             )}
           </CardContent>
         </Card>
+
+        {/* Moje úkoly na projektu */}
+        {tasks.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CheckSquare className="w-5 h-5 text-blue-600" />
+                Moje úkoly na projektu
+                <Badge variant="secondary" className="ml-1">
+                  {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length} otevřených
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {tasks.map(task => {
+                  const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().toDateString());
+                  const isDone = task.status === 'completed' || task.status === 'cancelled';
+                  return (
+                    <div
+                      key={task.id}
+                      className={`p-3 border rounded-lg ${isDone ? 'bg-green-50 border-green-200' : 'bg-white hover:bg-slate-50'} transition-colors`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className={`font-medium text-sm ${isDone ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                            {task.title}
+                          </p>
+                          {task.description && (
+                            <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {task.due_date && (
+                              <span className={`text-xs font-medium ${isOverdue && !isDone ? 'text-red-600' : 'text-slate-500'}`}>
+                                {isOverdue && !isDone ? 'Po termínu: ' : 'Do: '}
+                                {format(new Date(task.due_date), 'd. M. yyyy', { locale: cs })}
+                              </span>
+                            )}
+                            <Badge className={`text-xs px-1.5 py-0 ${
+                              task.priority === 'high' ? 'bg-red-100 text-red-700' :
+                              task.priority === 'low' ? 'bg-slate-100 text-slate-600' :
+                              'bg-orange-100 text-orange-700'
+                            }`}>
+                              {task.priority === 'high' ? 'Vysoká' : task.priority === 'low' ? 'Nízká' : 'Střední'}
+                            </Badge>
+                            {isDone && (
+                              <Badge className="text-xs px-1.5 py-0 bg-green-100 text-green-700">
+                                Hotovo
+                              </Badge>
+                            )}
+                          </div>
+                          {isDone && task.completed_at && (
+                            <p className="text-xs text-slate-400 mt-1">
+                              Splněno: {format(new Date(task.completed_at), 'd. M. yyyy', { locale: cs })}
+                            </p>
+                          )}
+                        </div>
+                        {!isDone && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCompleteTask(task)}
+                            className="flex-shrink-0 text-green-700 border-green-200 hover:bg-green-50"
+                          >
+                            <Check className="w-3 h-3 mr-1" />
+                            Splnit
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Tým a vozidla */}
         <div className="grid md:grid-cols-2 gap-6">
