@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { TrendingUp, Plus, Edit, Trash2, Calendar, Users, Loader2 } from 'lucide-react';
+import { TrendingUp, Plus, Edit, Trash2, Calendar, Users, Loader2, Receipt } from 'lucide-react';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
@@ -45,7 +45,7 @@ function formatAmount(amount, currency) {
   return `${Number(amount).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
-export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBudgetCurrency, onCostsChanged, projectId, timesheets = [], workers = [], assignments = [] }) {
+export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBudgetCurrency, onCostsChanged, projectId, timesheets = [], workers = [], assignments = [], invoices = [] }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCost, setEditingCost] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -124,6 +124,30 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
 
   const totalLaborApproved = laborCosts.reduce((sum, item) => sum + item.approvedCost, 0);
   const totalLaborPending = laborCosts.reduce((sum, item) => sum + item.pendingCost, 0);
+
+  // Invoice lookup and per-worker billing summary
+  const invoicesById = useMemo(() => invoices.reduce((acc, inv) => ({ ...acc, [inv.id]: inv }), {}), [invoices]);
+  const workersById = useMemo(() => workers.reduce((acc, w) => ({ ...acc, [w.id]: w }), {}), [workers]);
+
+  const invoiceBillingByWorker = useMemo(() => {
+    const approvedInvoices = invoices.filter(inv => inv.status === 'approved' || inv.status === 'paid');
+    const byWorker = {};
+    approvedInvoices.forEach(inv => {
+      const key = inv.worker_id || 'unknown';
+      if (!byWorker[key]) {
+        const w = workersById[inv.worker_id];
+        byWorker[key] = {
+          worker_id: inv.worker_id,
+          name: w ? `${w.first_name} ${w.last_name}` : 'Neznámý',
+          invoiceCount: 0,
+          totalAmount: 0,
+        };
+      }
+      byWorker[key].invoiceCount += 1;
+      byWorker[key].totalAmount += Number(inv.total_with_vat || 0);
+    });
+    return Object.values(byWorker);
+  }, [invoices, workersById]);
 
   // Součty provozních nákladů v CZK (amount_czk fallback na amount)
   const totalOperationalCZK = costs.reduce((sum, c) => sum + Number(c.amount_czk ?? c.amount), 0);
@@ -317,6 +341,40 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
                 </div>
               )}
 
+              {/* Fakturace z objednávek — per-worker summary */}
+              {invoiceBillingByWorker.length > 0 && (
+                <div className={laborCosts.length > 0 ? 'border-t pt-6' : ''}>
+                  <h3 className="text-sm font-semibold text-slate-600 mb-3 uppercase tracking-wide flex items-center gap-2">
+                    <Receipt className="w-4 h-4" />
+                    Fakturace z objednávek (schváleno)
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Montážník</TableHead>
+                          <TableHead className="text-right">Počet objednávek</TableHead>
+                          <TableHead className="text-right">Celkem fakturováno</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {invoiceBillingByWorker.map(item => (
+                          <TableRow key={item.worker_id}>
+                            <TableCell className="font-medium">{item.name}</TableCell>
+                            <TableCell className="text-right">{item.invoiceCount}</TableCell>
+                            <TableCell className="text-right font-semibold">{formatAmount(item.totalAmount, 'CZK')}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex justify-end items-center gap-4 mt-2 pt-2 border-t text-sm">
+                    <span className="text-slate-500">Celkem fakturováno:</span>
+                    <span className="font-bold text-slate-800">{formatAmount(invoiceBillingByWorker.reduce((s, i) => s + i.totalAmount, 0), 'CZK')}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Provozní náklady */}
               {costs.length > 0 && (
                 <div className={laborCosts.length > 0 ? 'border-t pt-6' : ''}>
@@ -349,47 +407,68 @@ export default function ProjectCosts({ costs, isAdmin, projectBudget, projectBud
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {costs.map(cost => (
-                          <TableRow key={cost.id}>
-                            <TableCell className="whitespace-nowrap text-sm text-slate-600">
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3.5 h-3.5 shrink-0" />
-                                {format(new Date(cost.date), 'd. M. yyyy', { locale: cs })}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={`${CATEGORY_COLORS[cost.category]} text-xs`}>
-                                {CATEGORIES[cost.category] || cost.category}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-700">{cost.description || '—'}</TableCell>
-                            <TableCell className="text-right font-semibold whitespace-nowrap">
-                              <span>{formatAmount(cost.amount, cost.currency || 'CZK')}</span>
-                              {cost.currency && cost.currency !== 'CZK' && cost.amount_czk && (
-                                <div className="text-xs text-slate-400 font-normal">
-                                  = {formatAmount(cost.amount_czk, 'CZK')}
-                                </div>
-                              )}
-                            </TableCell>
-                            {isAdmin && (
-                              <TableCell>
-                                <div className="flex gap-1 justify-end">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(cost)}>
-                                    <Edit className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-red-500 hover:text-red-700"
-                                    onClick={() => setDeleteConfirm({ open: true, costId: cost.id })}
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
+                        {costs.map(cost => {
+                          const fromInvoice = !!cost.source_invoice_id;
+                          const sourceInvoice = fromInvoice ? invoicesById[cost.source_invoice_id] : null;
+                          const invoiceWorker = sourceInvoice?.worker_id ? workersById[sourceInvoice.worker_id] : null;
+                          const invoiceWorkerName = invoiceWorker ? `${invoiceWorker.first_name} ${invoiceWorker.last_name}` : null;
+                          return (
+                            <TableRow key={cost.id} className={fromInvoice ? 'bg-blue-50/40' : ''}>
+                              <TableCell className="whitespace-nowrap text-sm text-slate-600">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                  {format(new Date(cost.date), 'd. M. yyyy', { locale: cs })}
+                                </span>
                               </TableCell>
-                            )}
-                          </TableRow>
-                        ))}
+                              <TableCell>
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <Badge className={`${CATEGORY_COLORS[cost.category]} text-xs`}>
+                                    {CATEGORIES[cost.category] || cost.category}
+                                  </Badge>
+                                  {fromInvoice && (
+                                    <Badge className="bg-blue-100 text-blue-700 text-xs gap-1">
+                                      <Receipt className="w-2.5 h-2.5" />
+                                      Objednávka
+                                    </Badge>
+                                  )}
+                                </div>
+                                {invoiceWorkerName && (
+                                  <p className="text-xs text-slate-500 mt-0.5">{invoiceWorkerName}</p>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm text-slate-700">{cost.description || '—'}</TableCell>
+                              <TableCell className="text-right font-semibold whitespace-nowrap">
+                                <span>{formatAmount(cost.amount, cost.currency || 'CZK')}</span>
+                                {cost.currency && cost.currency !== 'CZK' && cost.amount_czk && (
+                                  <div className="text-xs text-slate-400 font-normal">
+                                    = {formatAmount(cost.amount_czk, 'CZK')}
+                                  </div>
+                                )}
+                              </TableCell>
+                              {isAdmin && (
+                                <TableCell>
+                                  {fromInvoice ? (
+                                    <span className="text-xs text-slate-400 italic px-1">ze schválené objednávky</span>
+                                  ) : (
+                                    <div className="flex gap-1 justify-end">
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(cost)}>
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-red-500 hover:text-red-700"
+                                        onClick={() => setDeleteConfirm({ open: true, costId: cost.id })}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>

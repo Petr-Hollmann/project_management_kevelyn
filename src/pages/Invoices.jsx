@@ -11,11 +11,42 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Receipt, CheckCircle, XCircle, Eye, Search, Loader2, Download, Edit, Trash2, Plus, Minus, Filter } from "lucide-react";
+import { Receipt, CheckCircle, XCircle, Eye, Search, Loader2, Download, Edit, Trash2, Plus, Minus, Filter, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { cs } from "date-fns/locale";
 import { useToast } from "@/components/ui/use-toast";
-import { Toaster } from "@/components/ui/toaster";
+import { ProjectCost } from "@/entities/ProjectCost";
+
+// Maps invoice item descriptions to project_cost categories
+const INVOICE_ITEM_CATEGORY = {
+  'Přeprava - řidič': 'travel',
+  'Přeprava - posádka': 'travel',
+  'Ostatní náklady': 'other',
+};
+
+async function syncInvoiceCosts(invoice) {
+  if (!invoice.project_id) return;
+  const existing = await ProjectCost.filter({ source_invoice_id: invoice.id });
+  await Promise.all(existing.map(c => ProjectCost.delete(c.id)));
+  const date = (invoice.issue_date || new Date().toISOString()).split('T')[0];
+  const items = (invoice.items || []).filter(item => INVOICE_ITEM_CATEGORY[item.description]);
+  await Promise.all(items.map(item => ProjectCost.create({
+    project_id: invoice.project_id,
+    date,
+    category: INVOICE_ITEM_CATEGORY[item.description],
+    description: `${item.description} – Objednávka č. ${invoice.invoice_number}`,
+    amount: item.total_price,
+    currency: 'CZK',
+    exchange_rate: 1,
+    amount_czk: item.total_price,
+    source_invoice_id: invoice.id,
+  })));
+}
+
+async function removeInvoiceCosts(invoiceId) {
+  const existing = await ProjectCost.filter({ source_invoice_id: invoiceId });
+  await Promise.all(existing.map(c => ProjectCost.delete(c.id)));
+}
 
 const statusColors = {
   draft: "bg-gray-100 text-gray-800",
@@ -52,6 +83,7 @@ export default function InvoicesPage() {
     items: [],
     notes: ""
   });
+  const [isSyncingCosts, setIsSyncingCosts] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -78,7 +110,9 @@ export default function InvoicesPage() {
   const handleApprove = async (invoiceId) => {
     try {
       await Invoice.update(invoiceId, { status: "approved" });
-      toast({ title: "Schváleno", description: "Objednávka byla schválena." });
+      const invoice = invoices.find(inv => inv.id === invoiceId);
+      if (invoice) await syncInvoiceCosts(invoice).catch(err => console.error('Cost sync failed:', err));
+      toast({ title: "Schváleno", description: "Objednávka byla schválena a náklady přeneseny do zakázky." });
       loadData();
     } catch {
       toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se schválit objednávku." });
@@ -92,6 +126,7 @@ export default function InvoicesPage() {
     }
     try {
       await Invoice.update(selectedInvoice.id, { status: "rejected", rejection_reason: rejectReason });
+      await removeInvoiceCosts(selectedInvoice.id).catch(err => console.error('Cost removal failed:', err));
       toast({ title: "Zamítnuto", description: "Objednávka byla zamítnuta." });
       setShowRejectModal(false);
       setRejectReason("");
@@ -134,6 +169,11 @@ export default function InvoicesPage() {
         vat_amount: 0,
         total_with_vat: totalAmount
       });
+      // Re-sync costs if invoice was already approved
+      if (selectedInvoice.status === 'approved') {
+        const updatedInvoice = { ...selectedInvoice, items: editFormData.items, total_amount: totalAmount, total_with_vat: totalAmount };
+        await syncInvoiceCosts(updatedInvoice).catch(err => console.error('Cost sync failed:', err));
+      }
       toast({ title: "Upraveno", description: "Objednávka byla úspěšně upravena." });
       setShowEditDialog(false);
       setSelectedInvoice(null);
@@ -210,16 +250,39 @@ export default function InvoicesPage() {
     return w ? `${w.first_name} ${w.last_name}` : "Neznámý";
   };
 
+  const handleSyncAllCosts = async () => {
+    setIsSyncingCosts(true);
+    try {
+      const approved = invoices.filter(inv => inv.status === 'approved' || inv.status === 'paid');
+      await Promise.all(approved.map(inv => syncInvoiceCosts(inv).catch(err => console.error(`Sync failed for invoice ${inv.invoice_number}:`, err))));
+      toast({ title: "Hotovo", description: `Náklady synchronizovány ze ${approved.length} schválených objednávek.` });
+      loadData();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Chyba", description: "Synchronizace se nezdařila." });
+    }
+    setIsSyncingCosts(false);
+  };
+
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
-      <Toaster />
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
-            <Receipt className="w-8 h-8" />
-            Správa objednávek
-          </h1>
-          <p className="text-slate-600">Přehled a schvalování objednávek od montážníků</p>
+        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
+              <Receipt className="w-8 h-8" />
+              Správa objednávek
+            </h1>
+            <p className="text-slate-600">Přehled a schvalování objednávek od montážníků</p>
+          </div>
+          <button
+            onClick={handleSyncAllCosts}
+            disabled={isSyncingCosts}
+            className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Přenést přepravní a ostatní náklady ze všech schválených objednávek do nákladů zakázek"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncingCosts ? 'animate-spin' : ''}`} />
+            {isSyncingCosts ? 'Synchronizuji...' : 'Synchronizovat náklady do zakázek'}
+          </button>
         </div>
 
         {/* Filtry */}

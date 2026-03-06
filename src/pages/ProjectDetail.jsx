@@ -7,6 +7,7 @@ import { User } from "@/entities/User";
 import { TimesheetEntry } from "@/entities/TimesheetEntry";
 import { ProjectCost } from "@/entities/ProjectCost";
 import { Task } from "@/entities/Task";
+import { Invoice } from "@/entities/Invoice";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft, Edit, Printer, Share2, Calendar, Download, Plus } from "lucide-react";
@@ -118,6 +119,7 @@ export default function ProjectDetail() {
   const [assignments, setAssignments] = useState([]);
   const [timesheets, setTimesheets] = useState([]);
   const [costs, setCosts] = useState([]);
+  const [projectInvoices, setProjectInvoices] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [allProjects, setAllProjects] = useState([]);
   const [workers, setWorkers] = useState([]);
@@ -158,7 +160,7 @@ export default function ProjectDetail() {
   const loadProjectData = useCallback(async (projectId) => {
     setIsLoading(true);
     try {
-      const [projectData, assignmentsData, timesheetsData, costsData, tasksData, workersData, vehiclesData, userData, allProjectsData, allUsersData] = await Promise.all([
+      const [projectData, assignmentsData, timesheetsData, costsData, tasksData, workersData, vehiclesData, userData, allProjectsData, allUsersData, invoicesData] = await Promise.all([
         Project.list().then(projects => projects.find(p => p.id === projectId)),
         Assignment.list(),
         TimesheetEntry.filter({ project_id: projectId }, '-date'),
@@ -169,6 +171,7 @@ export default function ProjectDetail() {
         User.me().catch(() => null),
         Project.list(),
         User.list().catch(() => []),
+        Invoice.filter({ project_id: projectId }).catch(() => []),
       ]);
 
       if (!projectData) {
@@ -179,6 +182,7 @@ export default function ProjectDetail() {
         setAssignments(assignmentsData);
         setTimesheets(timesheetsData);
         setCosts(costsData);
+        setProjectInvoices(invoicesData || []);
         setTasks(tasksData);
         setAllProjects(allProjectsData);
         setWorkers(workersData);
@@ -680,6 +684,7 @@ export default function ProjectDetail() {
                     timesheets={timesheets}
                     workers={workers}
                     assignments={projectAssignments}
+                    invoices={projectInvoices}
                   />
                 </TabsContent>
               )}
