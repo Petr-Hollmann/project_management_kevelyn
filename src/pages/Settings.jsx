@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-import { Users, Loader2, Building2, FileText, DollarSign, UserCircle, KeyRound } from 'lucide-react';
+import { Users, Loader2, Building2, FileText, DollarSign, UserCircle, KeyRound, ClipboardList } from 'lucide-react';
 import { useToast } from "@/components/ui/use-toast";
-import { Toaster } from "@/components/ui/toaster";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -17,6 +16,7 @@ import ContractTemplateManagement from '../components/settings/ContractTemplateM
 import DefaultHourlyRateManagement from '../components/settings/DefaultHourlyRateManagement';
 import RoleTestingManagement from '../components/settings/RoleTestingManagement';
 import ChangePasswordDialog from '../components/ChangePasswordDialog';
+import TaskTemplateManagement from '../components/settings/TaskTemplateManagement';
 
 export default function SettingsPage() {
   const [workers, setWorkers] = useState([]);
@@ -58,7 +58,6 @@ export default function SettingsPage() {
 
   return (
     <div className="p-4 bg-slate-50 min-h-screen">
-      <Toaster />
       <div className="max-w-6xl mx-auto">
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-4 md:mb-6">Nastavení</h1>
         
@@ -70,7 +69,7 @@ export default function SettingsPage() {
             <>
                 <ChangePasswordDialog open={showChangePassword} onOpenChange={setShowChangePassword} />
                 <Tabs defaultValue="users" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-6 gap-1">
+                  <TabsList className="grid w-full grid-cols-7 gap-1">
                     <TabsTrigger value="users" className="text-xs md:text-sm">
                       <Users className="w-4 h-4 md:mr-2" />
                       <span className="hidden sm:inline ml-1 md:ml-0">Uživatelé</span>
@@ -90,6 +89,10 @@ export default function SettingsPage() {
                     <TabsTrigger value="rates" className="text-xs md:text-sm">
                       <DollarSign className="w-4 h-4 md:mr-2" />
                       <span className="hidden sm:inline ml-1 md:ml-0">Sazby</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="task_templates" className="text-xs md:text-sm">
+                      <ClipboardList className="w-4 h-4 md:mr-2" />
+                      <span className="hidden sm:inline ml-1 md:ml-0">Šablony úkolů</span>
                     </TabsTrigger>
                     <TabsTrigger value="heslo" className="text-xs md:text-sm">
                       <KeyRound className="w-4 h-4 md:mr-2" />
@@ -179,6 +182,23 @@ export default function SettingsPage() {
                       </CardHeader>
                       <CardContent>
                         <DefaultHourlyRateManagement />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="task_templates" className="mt-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <ClipboardList className="w-5 h-5" />
+                          Šablony úkolů
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                          Vytvořte předdefinované šablony úkolů, které lze automaticky přiřadit při zakládání nového projektu.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <TaskTemplateManagement />
                       </CardContent>
                     </Card>
                   </TabsContent>

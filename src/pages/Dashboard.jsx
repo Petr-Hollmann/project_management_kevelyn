@@ -35,6 +35,7 @@ import ResourceOverview from "../components/dashboard/ResourceOverview";
 import QuickActions from "../components/dashboard/QuickActions";
 import PendingInvoicesWidget from "../components/dashboard/PendingInvoicesWidget";
 import BirthdayNotifications from "../components/dashboard/BirthdayNotifications";
+import TasksWidget from "../components/dashboard/TasksWidget";
 
 const projectStatusOptions = [
   { value: "preparing", label: "Připravuje se" },
@@ -308,7 +309,7 @@ export default function Dashboard() {
         </div>
 
         {/* Quick actions + Pending invoices + Expiring documents + Birthdays */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <QuickActions />
           <PendingInvoicesWidget />
           <ExpiringDocuments
@@ -319,6 +320,11 @@ export default function Dashboard() {
             workers={workers}
             isLoading={isLoading}
           />
+        </div>
+
+        {/* Tasks widget */}
+        <div className="mb-8">
+          <TasksWidget />
         </div>
 
         {/* Gantt Chart */}

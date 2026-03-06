@@ -6,9 +6,10 @@ import { Vehicle } from "@/entities/Vehicle";
 import { User } from "@/entities/User";
 import { TimesheetEntry } from "@/entities/TimesheetEntry";
 import { ProjectCost } from "@/entities/ProjectCost";
+import { Task } from "@/entities/Task";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft, Edit, Printer, Share2, Calendar, Download } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Share2, Calendar, Download, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog";
@@ -34,6 +35,8 @@ import AssignmentForm from "../components/assignments/AssignmentForm";
 import ShareProjectDialog from "../components/projects/ShareProjectDialog";
 import ProjectTimesheets from "../components/projects/ProjectTimesheets";
 import ProjectCosts from "../components/projects/ProjectCosts";
+import ProjectTasksTab from "../components/projects/ProjectTasksTab";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, isBefore, isAfter, parseISO } from "date-fns";
 import { cs } from 'date-fns/locale';
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -115,11 +118,15 @@ export default function ProjectDetail() {
   const [assignments, setAssignments] = useState([]);
   const [timesheets, setTimesheets] = useState([]);
   const [costs, setCosts] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [allProjects, setAllProjects] = useState([]);
   const [workers, setWorkers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('assignments');
+  const [addTaskTrigger, setAddTaskTrigger] = useState(0);
   const { toast } = useToast();
 
   // Modals state
@@ -151,15 +158,17 @@ export default function ProjectDetail() {
   const loadProjectData = useCallback(async (projectId) => {
     setIsLoading(true);
     try {
-      const [projectData, assignmentsData, timesheetsData, costsData, workersData, vehiclesData, userData, allProjectsData] = await Promise.all([
+      const [projectData, assignmentsData, timesheetsData, costsData, tasksData, workersData, vehiclesData, userData, allProjectsData, allUsersData] = await Promise.all([
         Project.list().then(projects => projects.find(p => p.id === projectId)),
         Assignment.list(),
         TimesheetEntry.filter({ project_id: projectId }, '-date'),
         ProjectCost.filter({ project_id: projectId }, '-date'),
+        Task.filterByProject(projectId, 'due_date'),
         Worker.list(),
         Vehicle.list(),
         User.me().catch(() => null),
-        Project.list()
+        Project.list(),
+        User.list().catch(() => []),
       ]);
 
       if (!projectData) {
@@ -170,10 +179,12 @@ export default function ProjectDetail() {
         setAssignments(assignmentsData);
         setTimesheets(timesheetsData);
         setCosts(costsData);
+        setTasks(tasksData);
         setAllProjects(allProjectsData);
         setWorkers(workersData);
         setVehicles(vehiclesData);
         setUser(userData);
+        setAllUsers(allUsersData);
 
         // Fetch budget exchange rate if budget is not in CZK
         if (projectData.budget_currency && projectData.budget_currency !== 'CZK') {
@@ -214,6 +225,16 @@ export default function ProjectDetail() {
       toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se obnovit náklady." });
     }
   }, [project?.id, toast]);
+
+  const refreshTasks = useCallback(async () => {
+    if (!project?.id) return;
+    try {
+      const tasksData = await Task.filterByProject(project.id, 'due_date');
+      setTasks(tasksData);
+    } catch (error) {
+      console.error("Error refreshing tasks:", error);
+    }
+  }, [project?.id]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -352,10 +373,11 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleUpdateProject = async (projectData) => {
+  const handleUpdateProject = async (rawProjectData) => {
+    const { _selectedTemplateIds, ...projectData } = rawProjectData;
     try {
       // Kontrola, zda se změnily datumy projektu
-      const datesChanged = projectData.start_date !== project.start_date || 
+      const datesChanged = projectData.start_date !== project.start_date ||
                           projectData.end_date !== project.end_date;
       
       const projectAssignmentsCount = assignments.filter(a => a.project_id === project.id).length;
@@ -524,6 +546,12 @@ export default function ProjectDetail() {
     return project ? assignments.filter(a => a.project_id === project.id) : [];
   }, [project, assignments]);
 
+  // Uživatelé přiřazení k tomuto projektu (pro výběr v úkolech)
+  const projectUsers = React.useMemo(() => {
+    const projectWorkerIds = new Set(projectAssignments.map(a => a.worker_id));
+    return allUsers.filter(u => u.worker_profile_id && projectWorkerIds.has(u.worker_profile_id));
+  }, [projectAssignments, allUsers]);
+
   // Nové: určit, zda je uživatel montážník na tomto projektu
   const isInstallerOnProject = React.useMemo(() => {
     if (!user || user.app_role !== 'installer' || !user.worker_profile_id || !project) return false;
@@ -591,52 +619,84 @@ export default function ProjectDetail() {
               <Button onClick={() => setShowProjectEditModal(true)} className="w-full sm:w-auto">
                 <Edit className="w-4 h-4 mr-2" /> Upravit projekt
               </Button>
+              <Button
+                onClick={() => { setActiveTab('tasks'); setAddTaskTrigger(n => n + 1); }}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4 mr-2" /> Přidat úkol
+              </Button>
             </div>
           )}
         </div>
 
         <div className="printable-area">
           <ProjectDetailHeader project={project} isInstaller={!isAdmin} totalCostsCZK={isAdmin ? totalCostsCZK : undefined} budgetCZK={isAdmin ? budgetCZK : undefined} />
-          <div className="mt-8 space-y-8">
-            <ResourceAssignments
-              project={project}
-              assignments={projectAssignments}
-              allAssignments={assignments}
-              allProjects={allProjects}
-              onAddClick={openAssignmentModal}
-              onEditClick={openAssignmentModal}
-              onDeleteClick={handleDeleteAssignment}
-              workers={workers}
-              vehicles={vehicles}
-              isAdmin={isAdmin}
-            />
+          <div className="mt-8">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="mb-6">
+                <TabsTrigger value="assignments">Přiřazení</TabsTrigger>
+                {isAdmin && <TabsTrigger value="timesheets">Výkazy</TabsTrigger>}
+                {isAdmin && <TabsTrigger value="costs">Náklady</TabsTrigger>}
+                <TabsTrigger value="tasks">Úkoly ({tasks.length})</TabsTrigger>
+              </TabsList>
 
-            {/* Přehled výkazů práce - pouze pro administrátory */}
-            {isAdmin && (
-              <ProjectTimesheets
-                timesheets={timesheets}
-                workers={workers}
-                isAdmin={isAdmin}
-                onApprove={handleApproveTimesheet}
-                onReject={handleRejectTimesheet}
-                onRevert={handleRevertTimesheet}
-              />
-            )}
+              <TabsContent value="assignments">
+                <ResourceAssignments
+                  project={project}
+                  assignments={projectAssignments}
+                  allAssignments={assignments}
+                  allProjects={allProjects}
+                  onAddClick={openAssignmentModal}
+                  onEditClick={openAssignmentModal}
+                  onDeleteClick={handleDeleteAssignment}
+                  workers={workers}
+                  vehicles={vehicles}
+                  isAdmin={isAdmin}
+                />
+              </TabsContent>
 
-            {/* Náklady projektu - pouze pro administrátory */}
-            {isAdmin && (
-              <ProjectCosts
-                costs={costs}
-                isAdmin={isAdmin}
-                projectBudget={project.budget}
-                projectBudgetCurrency={project.budget_currency}
-                onCostsChanged={refreshCosts}
-                projectId={project.id}
-                timesheets={timesheets}
-                workers={workers}
-                assignments={projectAssignments}
-              />
-            )}
+              {isAdmin && (
+                <TabsContent value="timesheets">
+                  <ProjectTimesheets
+                    timesheets={timesheets}
+                    workers={workers}
+                    isAdmin={isAdmin}
+                    onApprove={handleApproveTimesheet}
+                    onReject={handleRejectTimesheet}
+                    onRevert={handleRevertTimesheet}
+                  />
+                </TabsContent>
+              )}
+
+              {isAdmin && (
+                <TabsContent value="costs">
+                  <ProjectCosts
+                    costs={costs}
+                    isAdmin={isAdmin}
+                    projectBudget={project.budget}
+                    projectBudgetCurrency={project.budget_currency}
+                    onCostsChanged={refreshCosts}
+                    projectId={project.id}
+                    timesheets={timesheets}
+                    workers={workers}
+                    assignments={projectAssignments}
+                  />
+                </TabsContent>
+              )}
+
+              <TabsContent value="tasks">
+                <ProjectTasksTab
+                  tasks={tasks}
+                  users={projectUsers}
+                  usersById={allUsers.reduce((acc, u) => ({ ...acc, [u.id]: u }), {})}
+                  projectId={project.id}
+                  isAdmin={isAdmin}
+                  currentUser={user}
+                  addTaskTrigger={addTaskTrigger}
+                  onTasksChanged={refreshTasks}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
 

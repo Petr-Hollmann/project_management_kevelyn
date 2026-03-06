@@ -15,6 +15,7 @@ import VehicleDetail from './pages/VehicleDetail';
 import Vehicles from './pages/Vehicles';
 import WorkerDetail from './pages/WorkerDetail';
 import Workers from './pages/Workers';
+import Tasks from './pages/Tasks';
 import __Layout from './Layout.jsx';
 
 
@@ -36,6 +37,7 @@ export const PAGES = {
     "Vehicles": Vehicles,
     "WorkerDetail": WorkerDetail,
     "Workers": Workers,
+    "Tasks": Tasks,
 }
 
 export const pagesConfig = {

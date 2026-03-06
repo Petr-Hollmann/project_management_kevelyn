@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Save, Plus, Trash2 } from "lucide-react";
+import { TaskTemplate } from "@/entities/TaskTemplate";
 
 const seniorityOptions = [
   { value: "junior", label: "Junior" },
@@ -43,8 +44,18 @@ const mergeDuplicateWorkers = (workers) => {
 
 export default function ProjectForm({ project, onSubmit, onCancel }) {
   // Merge duplicates when initializing the form
-  const initialRequiredWorkers = project?.required_workers ? 
+  const initialRequiredWorkers = project?.required_workers ?
     mergeDuplicateWorkers(project.required_workers) : [];
+
+  const [taskTemplates, setTaskTemplates] = useState([]);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
+
+  useEffect(() => {
+    // Only load templates when creating a new project
+    if (!project) {
+      TaskTemplate.list().then(setTaskTemplates).catch(() => {});
+    }
+  }, [project]);
 
   const [formData, setFormData] = useState(project || {
     project_number: "",
@@ -58,6 +69,7 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
     required_workers: initialRequiredWorkers,
     required_vehicles: 0,
     budget: "",
+    budget_currency: "CZK",
     description: "",
   });
 
@@ -77,6 +89,7 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
       required_workers: mergedWorkers,
       budget: formData.budget ? parseFloat(formData.budget) : undefined,
       required_vehicles: formData.required_vehicles ? parseInt(formData.required_vehicles, 10) : 0,
+      _selectedTemplateIds: selectedTemplateIds,
     });
   };
 
@@ -203,8 +216,17 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="budget">Rozpočet (Kč)</Label>
-          <Input id="budget" type="number" value={formData.budget} onChange={(e) => handleChange("budget", e.target.value)} placeholder="např. 150000" />
+          <Label htmlFor="budget">Rozpočet</Label>
+          <div className="flex gap-2">
+            <Input id="budget" type="number" value={formData.budget} onChange={(e) => handleChange("budget", e.target.value)} placeholder="např. 150000" className="flex-1" />
+            <Select value={formData.budget_currency} onValueChange={(value) => handleChange("budget_currency", value)}>
+              <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CZK">CZK</SelectItem>
+                <SelectItem value="EUR">EUR</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="space-y-2">
           <Label htmlFor="required_vehicles">Požadovaný počet vozidel</Label>
@@ -274,6 +296,35 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
         <Label htmlFor="description">Poznámka</Label>
         <Textarea id="description" value={formData.description} onChange={(e) => handleChange("description", e.target.value)} rows={3} />
       </div>
+
+      {/* Task template selection — only shown when creating a new project */}
+      {!project && taskTemplates.length > 0 && (
+        <div className="space-y-2 border-t border-slate-100 pt-4">
+          <Label>Šablony úkolů</Label>
+          <div className="space-y-1.5">
+            {taskTemplates.map(t => (
+              <label key={t.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300"
+                  checked={selectedTemplateIds.includes(t.id)}
+                  onChange={(e) => {
+                    setSelectedTemplateIds(prev =>
+                      e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id)
+                    );
+                  }}
+                />
+                <span className="text-slate-800">{t.name}</span>
+                {t.default_due_days > 0 && (
+                  <span className="text-slate-400 text-xs">(+{t.default_due_days} dní)</span>
+                )}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400">Vybrané šablony automaticky vytvoří úkoly po uložení projektu.</p>
+        </div>
+      )}
+
       <div className="flex justify-end gap-3 pt-4">
         <Button type="button" variant="outline" onClick={onCancel}>Zrušit</Button>
         <Button type="submit" className="bg-blue-600 hover:bg-blue-700">

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Project } from "@/entities/Project";
 import { User } from "@/entities/User";
+import { Task } from "@/entities/Task";
+import { TaskTemplate } from "@/entities/TaskTemplate";
 import { Button } from "@/components/ui/button";
 import { Plus, FolderOpen, Search, Download, CalendarDays } from "lucide-react";
 import { downloadProjectsICS } from "../utils/exportICS";
@@ -154,10 +156,37 @@ export default function Projects() {
 
   const handleSubmit = async (projectData) => {
     try {
+      const { _selectedTemplateIds, ...cleanData } = projectData;
+
       if (editingProject) {
-        await Project.update(editingProject.id, projectData);
+        await Project.update(editingProject.id, cleanData);
       } else {
-        await Project.create(projectData);
+        const newProject = await Project.create(cleanData);
+
+        // Auto-create tasks from selected templates
+        if (_selectedTemplateIds?.length > 0 && newProject?.id) {
+          const allTemplates = await TaskTemplate.list();
+          const selected = allTemplates.filter(t => _selectedTemplateIds.includes(t.id));
+          await Promise.all(selected.map(template => {
+            let dueDate = null;
+            if (newProject.start_date && template.default_due_days != null) {
+              const d = new Date(newProject.start_date);
+              d.setDate(d.getDate() + template.default_due_days);
+              dueDate = d.toISOString().split('T')[0];
+            }
+            return Task.create({
+              title: template.name,
+              description: template.description || null,
+              project_id: newProject.id,
+              due_date: dueDate,
+              priority: template.priority || 'medium',
+              status: 'pending',
+              created_by_user_id: user?.id,
+              task_template_id: template.id,
+              assigned_to_user_id: null,
+            });
+          }));
+        }
       }
       closeForm();
       loadData();

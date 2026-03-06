@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase-client';
 import { User } from '@/entities/User';
 import { Worker } from '@/entities/Worker';
 import { Assignment } from '@/entities/Assignment';
+import { Task } from '@/entities/Task';
 import { Project } from '@/entities/Project';
 import { TimesheetEntry } from '@/entities/TimesheetEntry';
 import { Vehicle } from '@/entities/Vehicle';
@@ -10,7 +11,7 @@ import { Certificate } from '@/entities/Certificate';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, PlusCircle, AlertTriangle, Clock, Briefcase, FileText, MapPin, CheckCircle, XCircle, FileEdit, Send, Car } from 'lucide-react';
+import { Calendar, PlusCircle, AlertTriangle, Clock, Briefcase, FileText, MapPin, CheckCircle, XCircle, FileEdit, Send, Car, CheckSquare } from 'lucide-react';
 import { format, isWithinInterval, isFuture, startOfMonth, endOfMonth, isBefore, addDays, subDays, parseISO } from 'date-fns';
 import { cs } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -32,6 +33,8 @@ export default function InstallerDashboard() {
   const [timesheetEntries, setTimesheetEntries] = useState([]);
   const [certificates, setCertificates] = useState([]);
   const [expiringCertificates, setExpiringCertificates] = useState([]);
+  const [myTasks, setMyTasks] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -60,6 +63,7 @@ export default function InstallerDashboard() {
       let effectiveWorkerId = null;
       try {
         currentUser = await User.me();
+        setCurrentUser(currentUser);
 
         effectiveWorkerId = currentUser.worker_profile_id;
         const impersonatedId = localStorage.getItem('impersonated_worker_id');
@@ -75,14 +79,15 @@ export default function InstallerDashboard() {
           return;
         }
 
-        const [workerData, allAssignments, allProjects, allTimesheets, workersData, vehiclesData, certificatesData] = await Promise.all([
+        const [workerData, allAssignments, allProjects, allTimesheets, workersData, vehiclesData, certificatesData, tasksData] = await Promise.all([
           Worker.get(effectiveWorkerId),
           Assignment.list(),
           Project.list(),
           TimesheetEntry.filter({ worker_id: effectiveWorkerId }),
           Worker.list(),
           Vehicle.list(),
-          Certificate.filter({ worker_id: effectiveWorkerId })
+          Certificate.filter({ worker_id: effectiveWorkerId }),
+          Task.filterByUser(currentUser.id, 'due_date').catch(() => []),
         ]);
 
         const projectsById = allProjects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
@@ -95,6 +100,8 @@ export default function InstallerDashboard() {
         setAllWorkers(workersData);
         setVehicles(vehiclesData);
         setCertificates(certificatesData);
+        const pendingTasks = tasksData.filter(t => t.status === 'pending' || t.status === 'in_progress');
+        setMyTasks(pendingTasks);
 
         // Výpočet expirujících certifikátů
         const today = new Date();
@@ -702,6 +709,65 @@ export default function InstallerDashboard() {
                     </div>
                   );
                 })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Moje úkoly */}
+        {myTasks.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckSquare className="w-5 h-5 text-blue-600" />
+                Moje úkoly
+              </CardTitle>
+              <CardDescription>Vaše aktuální přiřazené úkoly</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {myTasks.slice(0, 5).map(task => {
+                  const isOverdue = task.due_date && new Date(task.due_date) < new Date(new Date().toDateString());
+                  return (
+                    <div key={task.id} className="flex items-center justify-between gap-3 border rounded-lg p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-900 text-sm">{task.title}</p>
+                        {task.due_date && (
+                          <p className={`text-xs mt-0.5 ${isOverdue ? 'text-red-600 font-medium' : 'text-slate-500'}`}>
+                            Do: {format(new Date(task.due_date), 'd. M. yyyy', { locale: cs })}
+                            {isOverdue && ' (po termínu!)'}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await Task.update(task.id, {
+                              status: 'completed',
+                              completed_by_user_id: currentUser?.id || null,
+                              completed_at: new Date().toISOString(),
+                            });
+                            setMyTasks(prev => prev.filter(t => t.id !== task.id));
+                          } catch (e) {
+                            console.error('Error completing task:', e);
+                          }
+                        }}
+                      >
+                        <CheckSquare className="w-3 h-3 mr-1" />
+                        Splnit
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <Link to={createPageUrl('Tasks')}>
+                  <Button variant="ghost" size="sm" className="w-full text-xs text-slate-500">
+                    Zobrazit všechny úkoly
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>

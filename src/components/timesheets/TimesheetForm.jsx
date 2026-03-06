@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Save, AlertTriangle, Info, Send } from 'lucide-react';
 import { format, isWithinInterval } from 'date-fns';
+import { cs } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 
 export default function TimesheetForm({ project = null, worker, assignments = [], projects = [], entry = null, onSubmit, onCancel }) {
