@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Task } from '@/entities/Task';
 import { Project } from '@/entities/Project';
 import { User } from '@/entities/User';
@@ -7,15 +7,54 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckSquare, Plus, Check, AlertTriangle, Clock, Calendar, Inbox, CheckCircle2, Search, X } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { CheckSquare, Plus, Check, AlertTriangle, Clock, Calendar, Inbox, CheckCircle2, Search, X, ChevronsUpDown } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import TaskForm from '@/components/tasks/TaskForm';
 import TaskList from '@/components/tasks/TaskList';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
+
+// Searchable combobox for filter dropdowns
+function FilterCombobox({ value, onChange, options, placeholder, allLabel }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find(o => o.value === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="flex items-center justify-between w-full border rounded-md px-3 py-2 text-sm bg-white hover:bg-slate-50 text-left gap-2 min-w-0">
+          <span className="truncate text-slate-700">{selected ? selected.label : allLabel}</span>
+          <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Hledat..." />
+          <CommandList>
+            <CommandEmpty>Nic nenalezeno</CommandEmpty>
+            <CommandGroup>
+              <CommandItem value="__all__" onSelect={() => { onChange('all'); setOpen(false); }}>
+                <Check className={`mr-2 w-4 h-4 ${value === 'all' ? 'opacity-100' : 'opacity-0'}`} />
+                {allLabel}
+              </CommandItem>
+              {options.map(opt => (
+                <CommandItem key={opt.value} value={opt.label} onSelect={() => { onChange(opt.value); setOpen(false); }}>
+                  <Check className={`mr-2 w-4 h-4 ${value === opt.value ? 'opacity-100' : 'opacity-0'}`} />
+                  {opt.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const PRIORITY_COLORS = {
   low: 'bg-slate-100 text-slate-600',
@@ -277,7 +316,10 @@ export default function Tasks() {
         const q = search.toLowerCase();
         const title = (task.title || '').toLowerCase();
         const desc = (task.description || '').toLowerCase();
-        if (!title.includes(q) && !desc.includes(q)) return false;
+        const projectName = (task.project_id ? (projectsById[task.project_id]?.name || '') : '').toLowerCase();
+        const assigneeUser = task.assigned_to_user_id ? usersById[task.assigned_to_user_id] : null;
+        const assigneeName = (assigneeUser ? (assigneeUser.full_name || assigneeUser.email || '') : '').toLowerCase();
+        if (!title.includes(q) && !desc.includes(q) && !projectName.includes(q) && !assigneeName.includes(q)) return false;
       }
       if (filterProject !== 'all') {
         if (filterProject === '__none__') { if (task.project_id) return false; }
@@ -383,71 +425,84 @@ export default function Tasks() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Hledat podle názvu nebo popisu..."
+                placeholder="Hledat podle názvu, popisu, projektu nebo přiřazené osoby..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="pl-10"
               />
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger><SelectValue placeholder="Stav" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Všechny stavy</SelectItem>
-                  <SelectItem value="pending">Čeká</SelectItem>
-                  <SelectItem value="in_progress">V řešení</SelectItem>
-                  <SelectItem value="completed">Hotovo</SelectItem>
-                  <SelectItem value="cancelled">Zrušeno</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger><SelectValue placeholder="Priorita" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Všechny priority</SelectItem>
-                  <SelectItem value="high">Vysoká</SelectItem>
-                  <SelectItem value="medium">Střední</SelectItem>
-                  <SelectItem value="low">Nízká</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filterProject} onValueChange={setFilterProject}>
-                <SelectTrigger><SelectValue placeholder="Projekt" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Všechny projekty</SelectItem>
-                  <SelectItem value="__none__">Bez projektu</SelectItem>
-                  {projects.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {isAdmin && (
-                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-                  <SelectTrigger><SelectValue placeholder="Přiřazeno" /></SelectTrigger>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">Stav</Label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger><SelectValue placeholder="Stav" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Všichni</SelectItem>
-                    <SelectItem value="__none__">Nepřiřazeno</SelectItem>
-                    {users.map(u => (
-                      <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>
-                    ))}
+                    <SelectItem value="all">Všechny stavy</SelectItem>
+                    <SelectItem value="pending">Čeká</SelectItem>
+                    <SelectItem value="in_progress">V řešení</SelectItem>
+                    <SelectItem value="completed">Hotovo</SelectItem>
+                    <SelectItem value="cancelled">Zrušeno</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">Priorita</Label>
+                <Select value={filterPriority} onValueChange={setFilterPriority}>
+                  <SelectTrigger><SelectValue placeholder="Priorita" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Všechny priority</SelectItem>
+                    <SelectItem value="high">Vysoká</SelectItem>
+                    <SelectItem value="medium">Střední</SelectItem>
+                    <SelectItem value="low">Nízká</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">Projekt</Label>
+                <FilterCombobox
+                  value={filterProject}
+                  onChange={setFilterProject}
+                  options={[
+                    { value: '__none__', label: 'Bez projektu' },
+                    ...projects.map(p => ({ value: p.id, label: p.name })),
+                  ]}
+                  allLabel="Všechny projekty"
+                />
+              </div>
+
+              {isAdmin && (
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">Přiřazeno</Label>
+                  <FilterCombobox
+                    value={filterAssignee}
+                    onChange={setFilterAssignee}
+                    options={[
+                      { value: '__none__', label: 'Nepřiřazeno' },
+                      ...users.map(u => ({ value: u.id, label: u.full_name || u.email })),
+                    ]}
+                    allLabel="Všichni"
+                  />
+                </div>
               )}
 
-              <div className="flex gap-2 col-span-2 sm:col-span-1">
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">Termín od</Label>
                 <Input
                   type="date"
                   value={filterDueDateFrom}
                   onChange={e => setFilterDueDateFrom(e.target.value)}
-                  title="Termín od"
                   className="text-sm"
                 />
+              </div>
+
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">Termín do</Label>
                 <Input
                   type="date"
                   value={filterDueDateTo}
                   onChange={e => setFilterDueDateTo(e.target.value)}
-                  title="Termín do"
                   className="text-sm"
                 />
               </div>
