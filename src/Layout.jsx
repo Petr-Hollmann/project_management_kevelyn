@@ -15,6 +15,7 @@ import {
   UserCircle,
   Receipt,
   CheckSquare,
+  Bug,
 } from "lucide-react";
 import {
   Sidebar,
@@ -46,6 +47,7 @@ const adminNavItems = [
   { title: "Schvalování hodin", url: createPageUrl("TimesheetApproval"), icon: Clock },
   { title: "Objednávky", url: createPageUrl("Invoices"), icon: Receipt },
   { title: "Úkoly", url: createPageUrl("Tasks"), icon: CheckSquare },
+  { title: "Error logy", url: createPageUrl("AppErrorLogs"), icon: Bug },
 ];
 
 const installerNavItems = [
