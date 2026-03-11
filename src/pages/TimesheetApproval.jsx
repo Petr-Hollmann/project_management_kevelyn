@@ -9,18 +9,19 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Search, 
+import {
+  Clock,
+  CheckCircle,
+  XCircle,
+  Search,
   Filter,
   Calendar,
   User as UserIcon,
   Briefcase,
   FileText,
   AlertTriangle,
-  Car
+  Car,
+  Trash2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import StatsCard from '../components/dashboard/StatsCard';
@@ -80,6 +81,7 @@ export default function TimesheetApproval() {
   const [rejectReason, setRejectReason] = useState('');
   const [approveDialog, setApproveDialog] = useState({ open: false, entries: [] });
   const [detailDialog, setDetailDialog] = useState({ open: false, entry: null });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, entry: null });
 
   // Load data
   const fetchData = async () => {
@@ -287,6 +289,21 @@ export default function TimesheetApproval() {
         title: 'Chyba',
         description: 'Nepodařilo se vrátit schválení.',
       });
+    }
+  };
+
+  // Delete entry
+  const handleDelete = async () => {
+    const entry = deleteDialog.entry;
+    try {
+      await TimesheetEntry.delete(entry.id);
+      toast({ title: 'Smazáno', description: 'Výkaz byl smazán.' });
+      setDeleteDialog({ open: false, entry: null });
+      setSelectedEntries(prev => { const s = new Set(prev); s.delete(entry.id); return s; });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se smazat výkaz.' });
     }
   };
 
@@ -638,6 +655,14 @@ export default function TimesheetApproval() {
                                   Vrátit
                                 </Button>
                               )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDeleteDialog({ open: true, entry })}
+                                className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -708,6 +733,24 @@ export default function TimesheetApproval() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Dialog */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open, entry: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Smazat výkaz</AlertDialogTitle>
+            <AlertDialogDescription>
+              Opravdu chcete trvale smazat tento výkaz? Tuto akci nelze vrátit.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Zrušit</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+              Smazat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Detail Dialog */}
       <Dialog open={detailDialog.open} onOpenChange={(open) => setDetailDialog({ open, entry: null })}>
@@ -787,6 +830,17 @@ export default function TimesheetApproval() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailDialog({ open: false, entry: null })}>
               Zavřít
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDetailDialog({ open: false, entry: null });
+                setDeleteDialog({ open: true, entry: detailDialog.entry });
+              }}
+              className="bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Smazat
             </Button>
             {detailDialog.entry?.status === 'submitted' && (
               <>

@@ -284,7 +284,12 @@ export default function Invoiceprint() {
           <tbody>
             {invoice.items?.map((item, i) => (
               <tr key={i}>
-                <td>{item.description}</td>
+                <td>
+                  {item.description}
+                  {item.worker_name && (
+                    <div style={{fontSize:10,color:'#6b7280',marginTop:2}}>{item.worker_name}</div>
+                  )}
+                </td>
                 <td className="center">{item.quantity}</td>
                 <td className="center">{item.unit}</td>
                 <td className="right">{fmt(item.unit_price)} Kč</td>

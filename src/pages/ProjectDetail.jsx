@@ -528,11 +528,13 @@ export default function ProjectDetail() {
 
   const isAdmin = user?.app_role === 'admin';
 
-  // Total costs always in CZK (using stored amount_czk for non-CZK costs)
+  // Total costs in CZK — must match ProjectCosts.jsx grand total:
+  // labor (approved timesheets × rate) + invoice items (approved invoices) + manual costs (no source_invoice_id)
   const totalCostsCZK = React.useMemo(() => {
     const projectId = project?.id;
-    const opCosts = costs.reduce((sum, c) => sum + Number(c.amount_czk ?? c.amount), 0);
-    const laborCosts = timesheets
+
+    // 1. Labor
+    const laborTotal = timesheets
       .filter(t => t.status === 'approved')
       .reduce((sum, t) => {
         const assignment = assignments.find(a => a.project_id === projectId && a.worker_id === t.worker_id);
@@ -540,8 +542,27 @@ export default function ProjectDetail() {
         const rate = Number(assignment?.hourly_rate) || Number(worker?.hourly_rate_domestic) || 0;
         return sum + (t.hours_worked || 0) * rate;
       }, 0);
-    return opCosts + laborCosts;
-  }, [costs, project?.id, timesheets, workers, assignments]);
+
+    // 2. Invoice items from approved/paid invoices (excluding labor items — already in laborTotal)
+    const LABOR_DESCS = new Set(['Cena za dílo', 'Práce', 'Montáž', 'Montážní práce']);
+    const parseItems = (raw) => {
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return []; } }
+      return [];
+    };
+    const invoiceTotal = projectInvoices
+      .filter(inv => inv.status === 'approved' || inv.status === 'paid')
+      .reduce((sum, inv) => sum + parseItems(inv.items)
+        .filter(item => !LABOR_DESCS.has((item.description || '').trim()))
+        .reduce((s, item) => s + Number(item.total_price || 0), 0), 0);
+
+    // 3. Manual provozní náklady (no source_invoice_id)
+    const manualTotal = costs
+      .filter(c => !c.source_invoice_id)
+      .reduce((sum, c) => sum + Number(c.amount_czk ?? c.amount), 0);
+
+    return laborTotal + invoiceTotal + manualTotal;
+  }, [costs, project?.id, timesheets, workers, assignments, projectInvoices]);
 
   // Budget converted to CZK (for progress bar comparison)
   const budgetCZK = (project?.budget || 0) * budgetExchangeRate;
