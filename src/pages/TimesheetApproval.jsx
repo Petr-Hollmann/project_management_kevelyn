@@ -775,11 +775,11 @@ export default function TimesheetApproval() {
               <div className="grid grid-cols-2 gap-4 text-xs text-slate-500">
                 <div>
                   <p>Vytvořeno</p>
-                  <p>{format(parseISO(detailDialog.entry.created_date), 'd. M. yyyy HH:mm', { locale: cs })}</p>
+                  <p>{detailDialog.entry.created_date ? format(parseISO(detailDialog.entry.created_date), 'd. M. yyyy HH:mm', { locale: cs }) : '—'}</p>
                 </div>
                 <div>
                   <p>Aktualizováno</p>
-                  <p>{format(parseISO(detailDialog.entry.updated_date), 'd. M. yyyy HH:mm', { locale: cs })}</p>
+                  <p>{detailDialog.entry.updated_date ? format(parseISO(detailDialog.entry.updated_date), 'd. M. yyyy HH:mm', { locale: cs }) : '—'}</p>
                 </div>
               </div>
             </div>
