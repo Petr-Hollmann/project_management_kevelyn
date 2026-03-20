@@ -475,7 +475,13 @@ export default function Tasks() {
                   <MultiSelect
                     options={[
                       { value: '__none__', label: 'Nepřiřazeno' },
-                      ...users.map(u => ({ value: u.id, label: u.full_name || u.email })),
+                      ...users
+                        .filter(u => u.app_role && u.app_role !== 'pending')
+                        .map(u => {
+                          const name = u.full_name || u.email;
+                          const role = u.app_role === 'admin' ? 'Admin' : u.app_role === 'supervisor' ? 'Supervizor' : 'Montážník';
+                          return { value: u.id, label: `${name} (${role})` };
+                        }),
                     ]}
                     value={filterAssignee}
                     onChange={setFilterAssignee}

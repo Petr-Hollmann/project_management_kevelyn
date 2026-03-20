@@ -118,7 +118,13 @@ export default function TaskForm({ task, projectId, projects = [], users = [], a
     return projects.filter(p => workerProjectIds.has(p.id));
   }, [formData.assigned_to_user_id, users, assignments, projects]);
 
-  const userOptions = users.map(u => ({ value: u.id, label: u.full_name || u.email }));
+  const userOptions = users
+    .filter(u => u.app_role && u.app_role !== 'pending')
+    .map(u => {
+      const name = u.full_name || u.email;
+      const role = u.app_role === 'admin' ? 'Admin' : u.app_role === 'supervisor' ? 'Supervizor' : 'Montážník';
+      return { value: u.id, label: `${name} (${role})` };
+    });
   const projectOptions = filteredProjects.map(p => ({ value: p.id, label: p.name }));
 
   const hasProjectFilter = !!formData.assigned_to_user_id && filteredProjects.length < projects.length;
