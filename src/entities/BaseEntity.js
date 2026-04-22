@@ -53,9 +53,14 @@ export class BaseEntity {
   }
 
   async create(payload) {
+    // Convert empty strings to null — prevents database errors when
+    // nullable fields get empty strings from forms
+    const cleanPayload = Object.fromEntries(
+      Object.entries(payload).map(([k, v]) => [k, v === '' ? null : v])
+    );
     const { data, error } = await this.client
       .from(this.tableName)
-      .insert([payload])
+      .insert([cleanPayload])
       .select()
       .single();
     if (error) throw new Error(`[${this.tableName}] create() failed: ${error.message}`);
