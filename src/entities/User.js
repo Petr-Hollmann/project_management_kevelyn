@@ -9,7 +9,26 @@ export const User = {
       .select('*')
       .eq('id', user.id)
       .single();
-    return profile ?? { id: user.id, email: user.email, role: 'user' };
+    const realProfile = profile ?? { id: user.id, email: user.email, app_role: 'user' };
+
+    // Test mode: superAdmin impersonating an installer
+    if (realProfile.app_role === 'admin') {
+      const impersonatedWorkerId = typeof window !== 'undefined'
+        ? localStorage.getItem('impersonated_worker_id')
+        : null;
+      if (impersonatedWorkerId) {
+        const { data: impersonatedUser } = await supabase
+          .from('users')
+          .select('*')
+          .eq('worker_profile_id', impersonatedWorkerId)
+          .single();
+        if (impersonatedUser) return impersonatedUser;
+        // Worker profile exists but has no linked user account — return minimal installer mock
+        return { ...realProfile, app_role: 'installer', worker_profile_id: impersonatedWorkerId };
+      }
+    }
+
+    return realProfile;
   },
 
   // Onboarding.jsx volá tuto funkci
