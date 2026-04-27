@@ -16,6 +16,7 @@ import { createPageUrl } from '@/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { isSuperAdmin, isPrivileged } from '@/utils/roles';
 
 const PRIORITY_COLORS = {
   low: 'bg-slate-100 text-slate-600',
@@ -74,21 +75,41 @@ export default function TasksWidget() {
 
   const loadData = useCallback(async () => {
     try {
-      const [user, allTasksData, allUsers, allProjects, allAssignments] = await Promise.all([
-        User.me(),
-        Task.list('due_date'),
-        User.list(),
-        Project.list(),
-        Assignment.list(),
-      ]);
+      const user = await User.me();
       setCurrentUser(user);
-      setUsers(allUsers);
-      setProjects(allProjects);
-      setAssignments(allAssignments);
-      setUsersById(allUsers.reduce((acc, u) => ({ ...acc, [u.id]: u }), {}));
-      setProjectsById(allProjects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}));
-      const pending = allTasksData.filter(t => t.status === 'pending' || t.status === 'in_progress');
-      setAllTasks(pending);
+
+      if (isPrivileged(user)) {
+        const [allTasksData, allUsers, allProjects, allAssignments] = await Promise.all([
+          Task.list('due_date'),
+          User.list(),
+          Project.list(),
+          Assignment.list(),
+        ]);
+        setUsers(allUsers);
+        setProjects(allProjects);
+        setAssignments(allAssignments);
+        setUsersById(allUsers.reduce((acc, u) => ({ ...acc, [u.id]: u }), {}));
+        setProjectsById(allProjects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}));
+        let pending = allTasksData.filter(t => t.status === 'pending' || t.status === 'in_progress');
+        if (!isSuperAdmin(user)) {
+          // Supervisor: hide unassigned tasks
+          pending = pending.filter(t => t.assigned_to_user_id);
+        }
+        setAllTasks(pending);
+      } else {
+        // Installer: only own assigned tasks
+        const tasksData = await Task.filterByUser(user.id, 'due_date');
+        setUsers([user]);
+        setUsersById({ [user.id]: user });
+        const referencedProjectIds = [...new Set(tasksData.map(t => t.project_id).filter(Boolean))];
+        if (referencedProjectIds.length > 0) {
+          const projectsData = await Project.filter({ id: referencedProjectIds });
+          setProjects(projectsData);
+          setProjectsById(projectsData.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}));
+        }
+        const pending = tasksData.filter(t => t.status === 'pending' || t.status === 'in_progress');
+        setAllTasks(pending);
+      }
     } catch (error) {
       console.error('Error loading tasks widget:', error);
     }
