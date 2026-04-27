@@ -125,6 +125,21 @@ export default function WorkerForm({
       toast({ variant: "destructive", title: "Chyba", description: "Subdodavatel musí být přiřazen pod vedoucího party." });
       return;
     }
+    if (!formData.first_name?.trim()) {
+      toast({ variant: "destructive", title: "Chyba", description: "Křestní jméno je povinné." });
+      setActiveTab("info");
+      return;
+    }
+    if (!formData.last_name?.trim()) {
+      toast({ variant: "destructive", title: "Chyba", description: "Příjmení je povinné." });
+      setActiveTab("info");
+      return;
+    }
+    if (!formData.phone?.trim()) {
+      toast({ variant: "destructive", title: "Chyba", description: "Telefon je povinný." });
+      setActiveTab("info");
+      return;
+    }
     if (!formData.date_of_birth) {
       toast({ variant: "destructive", title: "Chyba", description: "Datum narození je povinné. Vyplňte ho prosím v záložce Fakturační údaje." });
       setActiveTab("billing");
@@ -275,19 +290,19 @@ export default function WorkerForm({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Křestní jméno</Label>
-                  <Input value={formData.first_name} onChange={e => handleChange("first_name", e.target.value)} readOnly={!canEditBasicInfo} className={!canEditBasicInfo ? "bg-slate-50 cursor-not-allowed" : ""} />
+                  <Label>Křestní jméno <span className="text-red-500">*</span></Label>
+                  <Input value={formData.first_name} onChange={e => handleChange("first_name", e.target.value)} readOnly={!canEditBasicInfo} className={!canEditBasicInfo ? "bg-slate-50 cursor-not-allowed" : (!formData.first_name?.trim() ? "border-red-400" : "")} />
                 </div>
                 <div>
-                  <Label>Příjmení</Label>
-                  <Input value={formData.last_name} onChange={e => handleChange("last_name", e.target.value)} readOnly={!canEditBasicInfo} className={!canEditBasicInfo ? "bg-slate-50 cursor-not-allowed" : ""} />
+                  <Label>Příjmení <span className="text-red-500">*</span></Label>
+                  <Input value={formData.last_name} onChange={e => handleChange("last_name", e.target.value)} readOnly={!canEditBasicInfo} className={!canEditBasicInfo ? "bg-slate-50 cursor-not-allowed" : (!formData.last_name?.trim() ? "border-red-400" : "")} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Telefon</Label>
-                  <Input value={formData.phone} onChange={e => handleChange("phone", e.target.value)} readOnly={!canEditBasicInfo} className={!canEditBasicInfo ? "bg-slate-50 cursor-not-allowed" : ""} />
+                  <Label>Telefon <span className="text-red-500">*</span></Label>
+                  <Input value={formData.phone} onChange={e => handleChange("phone", e.target.value)} readOnly={!canEditBasicInfo} className={!canEditBasicInfo ? "bg-slate-50 cursor-not-allowed" : (!formData.phone?.trim() ? "border-red-400" : "")} />
                 </div>
                 <div>
                   <Label>Email</Label>
