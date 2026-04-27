@@ -140,6 +140,11 @@ export default function WorkerForm({
       setActiveTab("info");
       return;
     }
+    if (!/^[+\d\s]+$/.test(formData.phone.trim())) {
+      toast({ variant: "destructive", title: "Chyba", description: "Telefon smí obsahovat pouze číslice, mezery a znak '+'." });
+      setActiveTab("info");
+      return;
+    }
     if (!formData.date_of_birth) {
       toast({ variant: "destructive", title: "Chyba", description: "Datum narození je povinné. Vyplňte ho prosím v záložce Fakturační údaje." });
       setActiveTab("billing");
