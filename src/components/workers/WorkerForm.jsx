@@ -125,6 +125,11 @@ export default function WorkerForm({
       toast({ variant: "destructive", title: "Chyba", description: "Subdodavatel musí být přiřazen pod vedoucího party." });
       return;
     }
+    if (!formData.date_of_birth) {
+      toast({ variant: "destructive", title: "Chyba", description: "Datum narození je povinné. Vyplňte ho prosím v záložce Fakturační údaje." });
+      setActiveTab("billing");
+      return;
+    }
     // Commit buffered certificate changes before saving the worker
     if (certManagementRef.current?.commitChanges) {
       try {
@@ -455,8 +460,8 @@ export default function WorkerForm({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Datum narození</Label>
-                  <Input type="date" value={formData.date_of_birth} onChange={e => handleChange("date_of_birth", e.target.value)} readOnly={!canEditBillingInfo} className={!canEditBillingInfo ? "bg-slate-50" : ""} />
+                  <Label>Datum narození <span className="text-red-500">*</span></Label>
+                  <Input type="date" value={formData.date_of_birth} onChange={e => handleChange("date_of_birth", e.target.value)} readOnly={!canEditBillingInfo} className={!canEditBillingInfo ? "bg-slate-50" : (!formData.date_of_birth ? "border-red-400" : "")} />
                 </div>
                 <div>
                   <Label>Občanství (státní příslušnost)</Label>
