@@ -22,9 +22,9 @@ export const User = {
           .select('*')
           .eq('worker_profile_id', impersonatedWorkerId)
           .single();
-        if (impersonatedUser) return impersonatedUser;
+        if (impersonatedUser && impersonatedUser.app_role === 'installer') return impersonatedUser;
         // Worker profile exists but has no linked user account — return minimal installer mock
-        return { ...realProfile, app_role: 'installer', worker_profile_id: impersonatedWorkerId };
+        return { ...realProfile, id: null, app_role: 'installer', worker_profile_id: impersonatedWorkerId };
       }
     }
 

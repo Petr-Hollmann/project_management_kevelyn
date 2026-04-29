@@ -6,6 +6,7 @@ class TaskEntity extends BaseEntity {
   }
 
   async filterByUser(userId, sortBy = 'due_date') {
+    if (!userId) return [];
     return this.filter({ assigned_to_user_id: userId }, sortBy);
   }
 
