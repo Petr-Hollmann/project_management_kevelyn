@@ -184,8 +184,8 @@ export default function Layout({ children, currentPageName }) {
 
   const showSettings = !isLoading && isSuperAdmin(user);
 
-  // Pending user - show simple header + waiting screen
-  if (user && user.app_role === 'pending') {
+  // Pending user (or no profile yet) - show simple header + waiting screen
+  if (user && (user.app_role === 'pending' || !user.app_role)) {
     return (
       <div className="min-h-screen flex flex-col bg-slate-50">
         <header className="bg-white border-b border-slate-200 px-6 py-4">

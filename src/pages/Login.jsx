@@ -177,7 +177,7 @@ export default function Login() {
       email,
       full_name: fullName,
       phone: normalizedPhone || null,
-      app_role: workerProfileId ? 'installer' : 'pending',
+      app_role: 'pending',
       worker_profile_id: workerProfileId,
     });
 

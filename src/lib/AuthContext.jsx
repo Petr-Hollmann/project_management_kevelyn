@@ -54,10 +54,29 @@ export const AuthProvider = ({ children }) => {
         .maybeSingle();
 
       console.log("[AuthContext] loadProfile result:", profile, "error:", profileError);
-      setUser(profile ?? { id: authUser.id, email: authUser.email, app_role: null });
+
+      if (!profile) {
+        // Profil neexistuje — typicky po potvrzení emailu, kdy upsert při registraci
+        // selhal kvůli chybějící session (RLS). Vytvoříme ho teď z auth metadat.
+        const meta = authUser.user_metadata ?? {};
+        const { data: newProfile } = await supabase
+          .from('users')
+          .upsert({
+            id: authUser.id,
+            email: authUser.email,
+            full_name: meta.full_name ?? null,
+            phone: meta.phone ?? null,
+            app_role: 'pending',
+          })
+          .select()
+          .maybeSingle();
+        setUser(newProfile ?? { id: authUser.id, email: authUser.email, app_role: 'pending' });
+      } else {
+        setUser(profile);
+      }
     } catch (err) {
       console.error("[AuthContext] loadProfile exception:", err);
-      setUser({ id: authUser.id, email: authUser.email, app_role: null });
+      setUser({ id: authUser.id, email: authUser.email, app_role: 'pending' });
     } finally {
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
