@@ -138,10 +138,13 @@ export default function VehicleDetail() {
     if (!newServiceDate) return;
     setSavingService(true);
     if (editingService) {
-      await supabase.from('vehicle_service').update({
+      // delete + insert to avoid dependency on UPDATE RLS policy
+      await supabase.from('vehicle_service').delete().eq('id', editingService.id);
+      await supabase.from('vehicle_service').insert({
+        vehicle_id: vehicle.id,
         service_date: newServiceDate,
         notes: newServiceNotes || null,
-      }).eq('id', editingService.id);
+      });
     } else {
       await supabase.from('vehicle_service').insert({
         vehicle_id: vehicle.id,
