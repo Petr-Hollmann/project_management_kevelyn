@@ -208,7 +208,12 @@ export default function VehicleDetail() {
     if (editingService) {
       await supabase.from('vehicle_service').delete().eq('id', editingService.id);
     }
-    await supabase.from('vehicle_service').insert(payload);
+    const { error: insertError } = await supabase.from('vehicle_service').insert(payload);
+    if (insertError) {
+      console.error('[VehicleDetail] insert vehicle_service failed:', insertError);
+      setSavingService(false);
+      return;
+    }
     // Sync last_service_date to the most recent service
     const allDates = editingService
       ? serviceRecords.map(r => r.id === editingService.id ? newServiceDate : r.service_date)
