@@ -19,8 +19,13 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
-  Filter
+  Filter,
+  Wrench,
+  Plus,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase-client";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   format,
   isBefore,
@@ -57,6 +62,11 @@ export default function VehicleDetail() {
   const [user, setUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [serviceRecords, setServiceRecords] = useState([]);
+  const [showAddServiceModal, setShowAddServiceModal] = useState(false);
+  const [newServiceDate, setNewServiceDate] = useState('');
+  const [newServiceNotes, setNewServiceNotes] = useState('');
+  const [savingService, setSavingService] = useState(false);
 
   // States for comprehensive vehicle timeline controls
   const [viewMode, setViewMode] = useState('month'); // week/month/year
@@ -79,18 +89,18 @@ export default function VehicleDetail() {
   const loadVehicleData = async (vehicleId) => {
     setIsLoading(true);
     try {
-      const [vehicleData, assignmentsData, projectsData, userData] = await Promise.all([
+      const [vehicleData, assignmentsData, projectsData, userData, serviceData] = await Promise.all([
         Vehicle.list().then(vehicles => vehicles.find(v => v.id === vehicleId)),
         Assignment.list(),
         Project.list(),
-        User.me().catch(() => null)
+        User.me().catch(() => null),
+        supabase.from('vehicle_service').select('*').eq('vehicle_id', vehicleId).order('service_date', { ascending: false }),
       ]);
       setVehicle(vehicleData);
       setAssignments(assignmentsData);
-      setProjects(projectsData);
-    // Ensure all projects have a status, default to 'preparing' if missing for filtering logic
       setProjects(projectsData.map(p => ({ ...p, status: p.status || 'preparing' })));
       setUser(userData);
+      setServiceRecords(serviceData.data ?? []);
     } catch (error) {
       console.error("Error loading vehicle data:", error);
     }
@@ -105,6 +115,25 @@ export default function VehicleDetail() {
     } catch (error) {
       console.error("Error updating vehicle:", error);
     }
+  };
+
+  const handleAddService = async () => {
+    if (!newServiceDate) return;
+    setSavingService(true);
+    await supabase.from('vehicle_service').insert({
+      vehicle_id: vehicle.id,
+      service_date: newServiceDate,
+      notes: newServiceNotes || null,
+    });
+    const latestDate = serviceRecords[0]?.service_date;
+    if (!latestDate || newServiceDate >= latestDate) {
+      await Vehicle.update(vehicle.id, { last_service_date: newServiceDate });
+    }
+    await loadVehicleData(vehicle.id);
+    setNewServiceDate('');
+    setNewServiceNotes('');
+    setShowAddServiceModal(false);
+    setSavingService(false);
   };
 
   const handlePrevPeriod = () => {
@@ -436,20 +465,17 @@ export default function VehicleDetail() {
                     { label: 'STK', date: vehicle.stk_expiry },
                     { label: 'Pojištění', date: vehicle.insurance_expiry },
                     { label: 'Dálniční známka', date: vehicle.highway_sticker_expiry },
-                    { label: 'Poslední servis', date: vehicle.last_service_date }
                   ].map(({ label, date }) => {
                     if (!date) return null;
-                    
                     const expiryDate = new Date(date);
                     const isExpiring = isBefore(expiryDate, addDays(new Date(), 30));
                     const isExpired = isBefore(expiryDate, new Date());
-                    
                     return (
                       <div key={label} className="flex justify-between items-center p-2 border rounded">
                         <span className="font-medium">{label}:</span>
                         <Badge className={
-                          isExpired ? "bg-red-100 text-red-800" : 
-                          isExpiring ? "bg-orange-100 text-orange-800" : 
+                          isExpired ? "bg-red-100 text-red-800" :
+                          isExpiring ? "bg-orange-100 text-orange-800" :
                           "bg-green-100 text-green-800"
                         }>
                           {format(expiryDate, "d. M. yyyy", { locale: cs })}
@@ -457,7 +483,64 @@ export default function VehicleDetail() {
                       </div>
                     );
                   })}
+
+                  {/* Příští servis — obrácená logika: zelená = daleko, oranžová = blíží se, červená = prošlo */}
+                  {(() => {
+                    const lastDate = serviceRecords[0]?.service_date ?? vehicle.last_service_date;
+                    if (!lastDate) return null;
+                    const nextService = addDays(new Date(lastDate), 60);
+                    const daysLeft = Math.ceil((nextService - new Date()) / (1000 * 60 * 60 * 24));
+                    const color = daysLeft <= 0
+                      ? "bg-red-100 text-red-800"
+                      : daysLeft <= 14
+                        ? "bg-orange-100 text-orange-800"
+                        : "bg-green-100 text-green-800";
+                    return (
+                      <div className="flex justify-between items-center p-2 border rounded">
+                        <span className="font-medium">Příští servis:</span>
+                        <Badge className={color}>
+                          {format(nextService, "d. M. yyyy", { locale: cs })}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Servisní historie */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-5 h-5" />
+                    Servisní historie
+                  </div>
+                  {isAdmin && (
+                    <Button size="sm" variant="outline" onClick={() => setShowAddServiceModal(true)}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Přidat servis
+                    </Button>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {serviceRecords.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-4">Žádná servisní historie</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {serviceRecords.map(record => (
+                      <div key={record.id} className="p-3 border rounded-lg">
+                        <p className="font-medium text-sm">
+                          {format(new Date(record.service_date), "d. M. yyyy", { locale: cs })}
+                        </p>
+                        {record.notes && (
+                          <p className="text-xs text-slate-500 mt-1">{record.notes}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -750,6 +833,42 @@ export default function VehicleDetail() {
             </Card>
           </div>
         </div>
+
+        {/* Add Service Modal */}
+        <Dialog open={showAddServiceModal} onOpenChange={setShowAddServiceModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Přidat servisní záznam</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Datum servisu</label>
+                <Input
+                  type="date"
+                  value={newServiceDate}
+                  onChange={(e) => setNewServiceDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Poznámky (olej, filtry, …)</label>
+                <Textarea
+                  value={newServiceNotes}
+                  onChange={(e) => setNewServiceNotes(e.target.value)}
+                  placeholder="Co bylo provedeno…"
+                  rows={3}
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setShowAddServiceModal(false)}>
+                  Zrušit
+                </Button>
+                <Button onClick={handleAddService} disabled={!newServiceDate || savingService}>
+                  {savingService ? "Ukládám…" : "Uložit"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Edit Modal */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
