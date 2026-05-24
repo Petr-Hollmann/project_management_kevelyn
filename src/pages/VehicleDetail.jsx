@@ -121,6 +121,7 @@ export default function VehicleDetail() {
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [editingService, setEditingService] = useState(null);
   const [newServiceDate, setNewServiceDate] = useState('');
+  const [newServiceNextDate, setNewServiceNextDate] = useState('');
   const [newServiceNotes, setNewServiceNotes] = useState('');
   const [newServiceItems, setNewServiceItems] = useState([]);
   const [savingService, setSavingService] = useState(false);
@@ -177,6 +178,7 @@ export default function VehicleDetail() {
   const openAddServiceModal = () => {
     setEditingService(null);
     setNewServiceDate('');
+    setNewServiceNextDate('');
     setNewServiceNotes('');
     setNewServiceItems([]);
     setShowAddServiceModal(true);
@@ -185,6 +187,7 @@ export default function VehicleDetail() {
   const openEditServiceModal = (record) => {
     setEditingService(record);
     setNewServiceDate(record.service_date);
+    setNewServiceNextDate(record.next_service_date ?? '');
     setNewServiceNotes(record.notes ?? '');
     setNewServiceItems(record.items ?? []);
     setShowAddServiceModal(true);
@@ -202,6 +205,7 @@ export default function VehicleDetail() {
     const payload = {
       vehicle_id: vehicle.id,
       service_date: newServiceDate,
+      next_service_date: newServiceNextDate || null,
       notes: newServiceNotes || null,
       items: newServiceItems,
     };
@@ -214,12 +218,15 @@ export default function VehicleDetail() {
       setSavingService(false);
       return;
     }
-    // Sync last_service_date to the most recent service
-    const allDates = editingService
-      ? serviceRecords.map(r => r.id === editingService.id ? newServiceDate : r.service_date)
-      : [...serviceRecords.map(r => r.service_date), newServiceDate];
-    const latest = allDates.sort().at(-1);
-    if (latest) await Vehicle.update(vehicle.id, { last_service_date: latest });
+    // Sync last_service_date + next_service_date z nejnovějšího záznamu
+    const allRecords = editingService
+      ? serviceRecords.filter(r => r.id !== editingService.id).concat([{ service_date: newServiceDate, next_service_date: newServiceNextDate || null }])
+      : [...serviceRecords, { service_date: newServiceDate, next_service_date: newServiceNextDate || null }];
+    const latest = allRecords.sort((a, b) => b.service_date.localeCompare(a.service_date))[0];
+    await Vehicle.update(vehicle.id, {
+      last_service_date: latest?.service_date ?? null,
+      next_service_date: latest?.next_service_date ?? null,
+    });
     await loadVehicleData(vehicle.id);
     setShowAddServiceModal(false);
     setSavingService(false);
@@ -227,9 +234,12 @@ export default function VehicleDetail() {
 
   const handleDeleteService = async (recordId) => {
     await supabase.from('vehicle_service').delete().eq('id', recordId);
-    const remaining = serviceRecords.filter(r => r.id !== recordId);
-    const latest = remaining.map(r => r.service_date).sort().at(-1) ?? null;
-    await Vehicle.update(vehicle.id, { last_service_date: latest });
+    const remaining = serviceRecords.filter(r => r.id !== recordId).sort((a, b) => b.service_date.localeCompare(a.service_date));
+    const latest = remaining[0] ?? null;
+    await Vehicle.update(vehicle.id, {
+      last_service_date: latest?.service_date ?? null,
+      next_service_date: latest?.next_service_date ?? null,
+    });
     await loadVehicleData(vehicle.id);
   };
 
@@ -581,11 +591,9 @@ export default function VehicleDetail() {
                     );
                   })}
 
-                  {/* Příští servis — obrácená logika: zelená = daleko, oranžová = blíží se, červená = prošlo */}
-                  {(() => {
-                    const lastDate = serviceRecords[0]?.service_date ?? vehicle.last_service_date;
-                    if (!lastDate) return null;
-                    const nextService = addDays(new Date(lastDate), 60);
+                  {/* Příští servis — datum zadané adminem při posledním servisu */}
+                  {vehicle.next_service_date && (() => {
+                    const nextService = new Date(vehicle.next_service_date);
                     const daysLeft = Math.ceil((nextService - new Date()) / (1000 * 60 * 60 * 24));
                     const color = daysLeft <= 0
                       ? "bg-red-100 text-red-800"
@@ -631,6 +639,11 @@ export default function VehicleDetail() {
                         <div className="min-w-0">
                           <p className="font-medium text-sm">
                             {format(new Date(record.service_date), "d. M. yyyy", { locale: cs })}
+                            {record.next_service_date && (
+                              <span className="ml-2 text-xs text-slate-500 font-normal">
+                                → příští: {format(new Date(record.next_service_date), "d. M. yyyy", { locale: cs })}
+                              </span>
+                            )}
                           </p>
                           {record.items?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
@@ -957,13 +970,23 @@ export default function VehicleDetail() {
               <DialogTitle>{editingService ? "Upravit servisní záznam" : "Přidat servisní záznam"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Datum servisu</label>
-                <Input
-                  type="date"
-                  value={newServiceDate}
-                  onChange={(e) => setNewServiceDate(e.target.value)}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Datum servisu</label>
+                  <Input
+                    type="date"
+                    value={newServiceDate}
+                    onChange={(e) => setNewServiceDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Příští servis</label>
+                  <Input
+                    type="date"
+                    value={newServiceNextDate}
+                    onChange={(e) => setNewServiceNextDate(e.target.value)}
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Co bylo provedeno</label>

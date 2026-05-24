@@ -264,9 +264,9 @@ export default function Dashboard() {
         }
       });
 
-      // Příští servis: last_service_date + 60 dní, varování 14 dní předem
-      if (vehicle.last_service_date) {
-        const nextService = addDays(new Date(vehicle.last_service_date), 60);
+      // Příští servis: explicitně zadané datum, varování 14 dní předem
+      if (vehicle.next_service_date) {
+        const nextService = new Date(vehicle.next_service_date);
         const daysLeft = Math.ceil((nextService.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         if (daysLeft < 0 || daysLeft <= 14) {
           expiring.push({
@@ -275,7 +275,7 @@ export default function Dashboard() {
             owner: `${vehicle.brand_model} (${vehicle.license_plate})`,
             owner_id: vehicle.id,
             owner_type: 'vehicle',
-            expiry_date: nextService.toISOString().split('T')[0],
+            expiry_date: vehicle.next_service_date,
             days_left: daysLeft,
             expired: daysLeft < 0,
           });
