@@ -57,6 +57,59 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 
 import VehicleForm from "../components/vehicles/VehicleForm";
 
+const SERVICE_CATEGORIES = [
+  {
+    label: "Oleje & kapaliny",
+    items: [
+      "Motorový olej + olejový filtr",
+      "Chladicí kapalina",
+      "Brzdová kapalina",
+      "Kapalina posilovače řízení",
+      "Převodový olej",
+    ],
+  },
+  {
+    label: "Filtry",
+    items: [
+      "Vzduchový filtr",
+      "Kabinový (pylový) filtr",
+      "Palivový filtr",
+    ],
+  },
+  {
+    label: "Brzdy",
+    items: [
+      "Brzdové destičky přední",
+      "Brzdové destičky zadní",
+      "Brzdové kotouče",
+    ],
+  },
+  {
+    label: "Zapalování & rozvod",
+    items: [
+      "Zapalovací svíčky",
+      "Rozvodový řemen / řetěz",
+    ],
+  },
+  {
+    label: "Kola & pneumatiky",
+    items: [
+      "Přezutí / výměna pneumatik",
+      "Vyvážení kol",
+      "Geometrie náprav",
+    ],
+  },
+  {
+    label: "Ostatní",
+    items: [
+      "Stěrače",
+      "Baterie / akumulátor",
+      "Klimatizace (plyn + filtr)",
+      "Osvětlení (kontrola žárovek)",
+    ],
+  },
+];
+
 export default function VehicleDetail() {
   const [vehicle, setVehicle] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -69,6 +122,7 @@ export default function VehicleDetail() {
   const [editingService, setEditingService] = useState(null);
   const [newServiceDate, setNewServiceDate] = useState('');
   const [newServiceNotes, setNewServiceNotes] = useState('');
+  const [newServiceItems, setNewServiceItems] = useState([]);
   const [savingService, setSavingService] = useState(false);
 
   // States for comprehensive vehicle timeline controls
@@ -124,6 +178,7 @@ export default function VehicleDetail() {
     setEditingService(null);
     setNewServiceDate('');
     setNewServiceNotes('');
+    setNewServiceItems([]);
     setShowAddServiceModal(true);
   };
 
@@ -131,27 +186,29 @@ export default function VehicleDetail() {
     setEditingService(record);
     setNewServiceDate(record.service_date);
     setNewServiceNotes(record.notes ?? '');
+    setNewServiceItems(record.items ?? []);
     setShowAddServiceModal(true);
+  };
+
+  const toggleServiceItem = (item) => {
+    setNewServiceItems(prev =>
+      prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]
+    );
   };
 
   const handleSaveService = async () => {
     if (!newServiceDate) return;
     setSavingService(true);
+    const payload = {
+      vehicle_id: vehicle.id,
+      service_date: newServiceDate,
+      notes: newServiceNotes || null,
+      items: newServiceItems,
+    };
     if (editingService) {
-      // delete + insert to avoid dependency on UPDATE RLS policy
       await supabase.from('vehicle_service').delete().eq('id', editingService.id);
-      await supabase.from('vehicle_service').insert({
-        vehicle_id: vehicle.id,
-        service_date: newServiceDate,
-        notes: newServiceNotes || null,
-      });
-    } else {
-      await supabase.from('vehicle_service').insert({
-        vehicle_id: vehicle.id,
-        service_date: newServiceDate,
-        notes: newServiceNotes || null,
-      });
     }
+    await supabase.from('vehicle_service').insert(payload);
     // Sync last_service_date to the most recent service
     const allDates = editingService
       ? serviceRecords.map(r => r.id === editingService.id ? newServiceDate : r.service_date)
@@ -570,6 +627,13 @@ export default function VehicleDetail() {
                           <p className="font-medium text-sm">
                             {format(new Date(record.service_date), "d. M. yyyy", { locale: cs })}
                           </p>
+                          {record.items?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {record.items.map(item => (
+                                <span key={item} className="text-xs bg-slate-100 text-slate-700 rounded px-1.5 py-0.5">{item}</span>
+                              ))}
+                            </div>
+                          )}
                           {record.notes && (
                             <p className="text-xs text-slate-500 mt-1">{record.notes}</p>
                           )}
@@ -897,12 +961,35 @@ export default function VehicleDetail() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Poznámky (olej, filtry, …)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Co bylo provedeno</label>
+                <div className="space-y-3 max-h-64 overflow-y-auto border rounded-lg p-3">
+                  {SERVICE_CATEGORIES.map(cat => (
+                    <div key={cat.label}>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{cat.label}</p>
+                      <div className="space-y-1">
+                        {cat.items.map(item => (
+                          <label key={item} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5">
+                            <input
+                              type="checkbox"
+                              checked={newServiceItems.includes(item)}
+                              onChange={() => toggleServiceItem(item)}
+                              className="w-4 h-4 rounded accent-blue-600"
+                            />
+                            <span className="text-sm text-slate-700">{item}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Poznámky</label>
                 <Textarea
                   value={newServiceNotes}
                   onChange={(e) => setNewServiceNotes(e.target.value)}
-                  placeholder="Co bylo provedeno…"
-                  rows={3}
+                  placeholder="Další poznámky…"
+                  rows={2}
                 />
               </div>
               <div className="flex gap-2 justify-end">
