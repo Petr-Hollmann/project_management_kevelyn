@@ -22,6 +22,8 @@ import {
   Filter,
   Wrench,
   Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-client";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,6 +66,7 @@ export default function VehicleDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [serviceRecords, setServiceRecords] = useState([]);
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
+  const [editingService, setEditingService] = useState(null);
   const [newServiceDate, setNewServiceDate] = useState('');
   const [newServiceNotes, setNewServiceNotes] = useState('');
   const [savingService, setSavingService] = useState(false);
@@ -117,23 +120,52 @@ export default function VehicleDetail() {
     }
   };
 
-  const handleAddService = async () => {
-    if (!newServiceDate) return;
-    setSavingService(true);
-    await supabase.from('vehicle_service').insert({
-      vehicle_id: vehicle.id,
-      service_date: newServiceDate,
-      notes: newServiceNotes || null,
-    });
-    const latestDate = serviceRecords[0]?.service_date;
-    if (!latestDate || newServiceDate >= latestDate) {
-      await Vehicle.update(vehicle.id, { last_service_date: newServiceDate });
-    }
-    await loadVehicleData(vehicle.id);
+  const openAddServiceModal = () => {
+    setEditingService(null);
     setNewServiceDate('');
     setNewServiceNotes('');
+    setShowAddServiceModal(true);
+  };
+
+  const openEditServiceModal = (record) => {
+    setEditingService(record);
+    setNewServiceDate(record.service_date);
+    setNewServiceNotes(record.notes ?? '');
+    setShowAddServiceModal(true);
+  };
+
+  const handleSaveService = async () => {
+    if (!newServiceDate) return;
+    setSavingService(true);
+    if (editingService) {
+      await supabase.from('vehicle_service').update({
+        service_date: newServiceDate,
+        notes: newServiceNotes || null,
+      }).eq('id', editingService.id);
+    } else {
+      await supabase.from('vehicle_service').insert({
+        vehicle_id: vehicle.id,
+        service_date: newServiceDate,
+        notes: newServiceNotes || null,
+      });
+    }
+    // Sync last_service_date to the most recent service
+    const allDates = editingService
+      ? serviceRecords.map(r => r.id === editingService.id ? newServiceDate : r.service_date)
+      : [...serviceRecords.map(r => r.service_date), newServiceDate];
+    const latest = allDates.sort().at(-1);
+    if (latest) await Vehicle.update(vehicle.id, { last_service_date: latest });
+    await loadVehicleData(vehicle.id);
     setShowAddServiceModal(false);
     setSavingService(false);
+  };
+
+  const handleDeleteService = async (recordId) => {
+    await supabase.from('vehicle_service').delete().eq('id', recordId);
+    const remaining = serviceRecords.filter(r => r.id !== recordId);
+    const latest = remaining.map(r => r.service_date).sort().at(-1) ?? null;
+    await Vehicle.update(vehicle.id, { last_service_date: latest });
+    await loadVehicleData(vehicle.id);
   };
 
   const handlePrevPeriod = () => {
@@ -517,7 +549,7 @@ export default function VehicleDetail() {
                     Servisní historie
                   </div>
                   {isAdmin && (
-                    <Button size="sm" variant="outline" onClick={() => setShowAddServiceModal(true)}>
+                    <Button size="sm" variant="outline" onClick={openAddServiceModal}>
                       <Plus className="w-4 h-4 mr-1" />
                       Přidat servis
                     </Button>
@@ -530,12 +562,24 @@ export default function VehicleDetail() {
                 ) : (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {serviceRecords.map(record => (
-                      <div key={record.id} className="p-3 border rounded-lg">
-                        <p className="font-medium text-sm">
-                          {format(new Date(record.service_date), "d. M. yyyy", { locale: cs })}
-                        </p>
-                        {record.notes && (
-                          <p className="text-xs text-slate-500 mt-1">{record.notes}</p>
+                      <div key={record.id} className="flex items-start justify-between p-3 border rounded-lg gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">
+                            {format(new Date(record.service_date), "d. M. yyyy", { locale: cs })}
+                          </p>
+                          {record.notes && (
+                            <p className="text-xs text-slate-500 mt-1">{record.notes}</p>
+                          )}
+                        </div>
+                        {isAdmin && (
+                          <div className="flex gap-1 flex-shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditServiceModal(record)}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteService(record.id)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -838,7 +882,7 @@ export default function VehicleDetail() {
         <Dialog open={showAddServiceModal} onOpenChange={setShowAddServiceModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Přidat servisní záznam</DialogTitle>
+              <DialogTitle>{editingService ? "Upravit servisní záznam" : "Přidat servisní záznam"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div>
@@ -862,7 +906,7 @@ export default function VehicleDetail() {
                 <Button variant="outline" onClick={() => setShowAddServiceModal(false)}>
                   Zrušit
                 </Button>
-                <Button onClick={handleAddService} disabled={!newServiceDate || savingService}>
+                <Button onClick={handleSaveService} disabled={!newServiceDate || savingService}>
                   {savingService ? "Ukládám…" : "Uložit"}
                 </Button>
               </div>

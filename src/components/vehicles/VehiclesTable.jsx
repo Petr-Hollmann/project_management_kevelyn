@@ -28,6 +28,33 @@ const statusColors = {
   in_service: "bg-yellow-100 text-yellow-800"
 };
 
+const getNextServiceBadge = (lastServiceDate, isCard = false) => {
+    if (!lastServiceDate) return null;
+    const nextService = addDays(new Date(lastServiceDate), 60);
+    const daysLeft = Math.ceil((nextService - new Date()) / (1000 * 60 * 60 * 24));
+    const color = daysLeft <= 0
+        ? "bg-red-100 text-red-800"
+        : daysLeft <= 14
+            ? "bg-orange-100 text-orange-800"
+            : "bg-green-100 text-green-800";
+
+    if (isCard) {
+        return (
+            <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-500">Příští servis:</span>
+                <Badge variant="outline" className={`${color} text-xs`}>
+                    {format(nextService, "d.M.yy", { locale: cs })}
+                </Badge>
+            </div>
+        );
+    }
+    return (
+        <Badge className={`${color} text-xs`}>
+            SER: {format(nextService, "d.M.yy", { locale: cs })}
+        </Badge>
+    );
+};
+
 const getExpiryBadge = (date, label, isCard = false) => {
     if (!date) return null;
     const expiry = new Date(date);
@@ -90,6 +117,7 @@ const VehicleCard = ({ vehicle, onEdit, onDelete, onViewDetail, isAdmin, checkEx
                 {getExpiryBadge(vehicle.stk_expiry, "STK", true)}
                 {getExpiryBadge(vehicle.insurance_expiry, "Pojištění", true)}
                 {getExpiryBadge(vehicle.highway_sticker_expiry, "Dálniční známka", true)}
+                {getNextServiceBadge(vehicle.last_service_date, true)}
             </div>
         </CardContent>
         <CardFooter className="flex justify-end gap-2 bg-slate-50 py-2 px-4 border-t">
@@ -157,6 +185,7 @@ export default function VehiclesTable({ vehicles, onEdit, onDelete, onViewDetail
                     {getExpiryBadge(vehicle.stk_expiry, "STK")}
                     {getExpiryBadge(vehicle.insurance_expiry, "POJ")}
                     {getExpiryBadge(vehicle.highway_sticker_expiry, "DZ")}
+                    {getNextServiceBadge(vehicle.last_service_date)}
                   </div>
                 </TableCell>
                 <TableCell>
