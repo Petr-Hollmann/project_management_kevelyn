@@ -170,16 +170,23 @@ export default function Login() {
       }
     }
 
-    // 4. Upsert profilu v tabulce users
+    // 4. Upsert profilu v tabulce users (pojistka — nový DB trigger to udělá taky)
     const normalizedPhone = phone ? normalizePhone(phone) : null;
-    await supabase.from('users').upsert({
+    const { error: upsertError } = await supabase.from('users').upsert({
       id: userId,
       email,
       full_name: fullName,
       phone: normalizedPhone || null,
       app_role: 'pending',
+      role: 'user',
       worker_profile_id: workerProfileId,
     });
+    if (upsertError) console.error('[Login] upsert users failed:', upsertError);
+
+    // 5. Notifikace admina — přímé volání edge funkce (bez závislosti na DB triggeru)
+    supabase.functions.invoke('notify-pending-user', {
+      body: { user_name: fullName, user_email: email },
+    }).catch(err => console.error('[Login] notify-pending-user failed:', err));
 
     // Vynutit reload profilu, aby Layout viděl správný app_role hned po registraci
     await reloadProfile();
