@@ -56,10 +56,9 @@ export const AuthProvider = ({ children }) => {
       console.log("[AuthContext] loadProfile result:", profile, "error:", profileError);
 
       if (!profile) {
-        // Profil neexistuje — typicky po potvrzení emailu, kdy upsert při registraci
-        // selhal kvůli chybějící session (RLS). Vytvoříme ho teď z auth metadat.
+        // Profil neexistuje — fallback (normálně ho vytvoří DB trigger na auth.users)
         const meta = authUser.user_metadata ?? {};
-        const { data: newProfile } = await supabase
+        const { data: newProfile, error: upsertError } = await supabase
           .from('users')
           .upsert({
             id: authUser.id,
@@ -67,9 +66,11 @@ export const AuthProvider = ({ children }) => {
             full_name: meta.full_name ?? null,
             phone: meta.phone ?? null,
             app_role: 'pending',
+            role: 'user',
           })
           .select()
           .maybeSingle();
+        if (upsertError) console.error('[AuthContext] fallback upsert failed:', upsertError);
         setUser(newProfile ?? { id: authUser.id, email: authUser.email, app_role: 'pending' });
       } else {
         setUser(profile);
